@@ -1,0 +1,113 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\ApparenceResource;
+use App\Models\ApparenceConfiguration;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class ApparenceConfigurationController extends Controller
+{
+    /**
+     * Obtenir la configuration d'apparence de la paroisse du tenant connecté.
+     */
+    public function show(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id;
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Aucune paroisse rattachée au compte actuel.',
+            ], 404);
+        }
+
+        $apparence = ApparenceConfiguration::firstOrCreate(
+            ['paroisse_configuration_id' => $paroisseId],
+            [
+                'couleur_principale' => '#4F46E5',
+                'couleur_secondaire' => '#D97706',
+                'police_caracteres' => 'Inter',
+            ]
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'data' => new ApparenceResource($apparence),
+        ]);
+    }
+
+    /**
+     * Mettre à jour la configuration d'apparence (Couleurs & Police).
+     */
+    public function update(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id;
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Aucune paroisse rattachée au compte actuel.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'couleur_principale' => ['sometimes', 'required', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
+            'couleur_secondaire' => ['sometimes', 'required', 'string', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
+            'police_caracteres' => ['sometimes', 'required', 'string', 'in:Inter,Roboto,Outfit,Poppins,Nunito,DM Sans'],
+            'logo_url' => ['nullable', 'string', 'max:550'],
+            'entete_document' => ['nullable', 'string'],
+            'pied_page_document' => ['nullable', 'string'],
+        ]);
+
+        $apparence = ApparenceConfiguration::firstOrCreate(
+            ['paroisse_configuration_id' => $paroisseId],
+            [
+                'couleur_principale' => '#4F46E5',
+                'couleur_secondaire' => '#D97706',
+                'police_caracteres' => 'Inter',
+            ]
+        );
+
+        $apparence->update($validated);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Configuration d\'apparence mise à jour avec succès.',
+            'data' => new ApparenceResource($apparence),
+        ]);
+    }
+
+    /**
+     * Restaurer les valeurs par défaut (Bouton Restaurer les valeurs par défaut).
+     */
+    public function reset(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id;
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Aucune paroisse rattachée au compte actuel.',
+            ], 404);
+        }
+
+        $apparence = ApparenceConfiguration::firstOrCreate(
+            ['paroisse_configuration_id' => $paroisseId]
+        );
+
+        $apparence->update([
+            'couleur_principale' => '#4F46E5',
+            'couleur_secondaire' => '#D97706',
+            'police_caracteres' => 'Inter',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Valeurs d\'apparence par défaut restaurées avec succès.',
+            'data' => new ApparenceResource($apparence),
+        ]);
+    }
+}
