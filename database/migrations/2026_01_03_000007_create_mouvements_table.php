@@ -18,7 +18,6 @@ return new class extends Migration
                 ->constrained('paroisse_configurations')
                 ->cascadeOnDelete();
             $table->string('nom', 150);
-            $table->string('code')->nullable();
             $table->string('responsable', 150)->nullable();
             $table->string('telephone', 20)->nullable();
             $table->text('description')->nullable();

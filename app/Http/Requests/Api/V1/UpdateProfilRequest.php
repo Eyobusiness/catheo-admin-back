@@ -14,11 +14,20 @@ class UpdateProfilRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nom' => ['sometimes', 'required', 'string', 'max:255'],
-            'libelle' => ['sometimes', 'required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'statut' => ['sometimes', 'required', 'string', 'in:actif,inactif'],
-            'permissions' => ['nullable', 'array'],
+            'nom'              => ['sometimes', 'nullable', 'string', 'max:255'],
+            'libelle'          => ['sometimes', 'nullable', 'string', 'max:255'],
+            'description'      => ['nullable', 'string'],
+            'statut'           => ['sometimes', 'nullable', 'string', 'in:actif,inactif,Actif,Inactif'],
+            'permissions'      => ['nullable', 'array'],
+            'menu_permissions' => ['nullable', 'array'],
+            'menus'            => ['nullable', 'array'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'nom.max' => 'Le nom ne peut pas dépasser 255 caractères.',
         ];
     }
 }

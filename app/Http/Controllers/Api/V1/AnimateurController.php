@@ -5,9 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\AnimateurResource;
 use App\Models\Animateur;
-use App\Models\User;
+use App\Models\CatecheseConfiguration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AnimateurController extends Controller
 {
@@ -16,12 +17,13 @@ class AnimateurController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
 
-        $query = Animateur::with('user')->where('paroisse_configuration_id', $paroisseId);
+        $query = Animateur::where('paroisse_configuration_id', $paroisseId);
 
         if ($request->filled('statut')) {
-            $query->where('statut', $request->statut);
+            $statut = strtolower($request->statut);
+            $query->whereRaw('LOWER(statut) = ?', [$statut]);
         }
 
         if ($request->filled('search')) {
@@ -29,166 +31,172 @@ class AnimateurController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('nom', 'like', "%{$search}%")
                   ->orWhere('prenoms', 'like', "%{$search}%")
-                  ->orWhere('matricule', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('telephone', 'like', "%{$search}%");
+                  ->orWhere('telephone', 'like', "%{$search}%")
+                  ->orWhere('profession', 'like', "%{$search}%");
             });
         }
 
         $perPage = (int) $request->get('per_page', 15);
-        $animateurs = $query->latest()->paginate($perPage);
+        $animateurs = $query->orderBy('nom')->orderBy('prenoms')->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
-            'data' => AnimateurResource::collection($animateurs->items()),
-            'meta' => [
+            'data'   => AnimateurResource::collection($animateurs->items()),
+            'meta'   => [
                 'current_page' => $animateurs->currentPage(),
-                'last_page' => $animateurs->lastPage(),
-                'per_page' => $animateurs->perPage(),
-                'total' => $animateurs->total(),
+                'last_page'    => $animateurs->lastPage(),
+                'per_page'     => $animateurs->perPage(),
+                'total'        => $animateurs->total(),
             ],
         ]);
     }
 
     /**
-     * Enregistrement d'un nouvel animateur.
+     * Enregistrement d'un nouvel animateur (connexion directe dans la table `animateurs`).
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
-            'user_id' => ['nullable', 'string', 'exists:users,uuid'],
-            'matricule' => ['nullable', 'string', 'max:50'],
-            'nom' => ['required', 'string', 'max:255'],
-            'prenoms' => ['required', 'string', 'max:255'],
-            'sexe' => ['required', 'string', 'in:M,F'],
-            'telephone' => ['nullable', 'string', 'max:30'],
-            'email' => ['nullable', 'string', 'email', 'max:255'],
+            'nom'        => ['required', 'string', 'max:255'],
+            'prenoms'    => ['required', 'string', 'max:255'],
+            'sexe'       => ['required', 'string', 'in:M,F,m,f'],
+            'telephone'  => ['nullable', 'string', 'max:30'],
+            'email'      => ['nullable', 'string', 'email', 'max:255'],
             'profession' => ['nullable', 'string', 'max:255'],
-            'statut' => ['nullable', 'string', 'in:actif,inactif'],
+            'statut'     => ['nullable', 'string'],
+            'password'   => ['nullable', 'string', 'min:6'],
         ]);
 
-        if (!empty($validated['user_id'])) {
-            $user = User::where('uuid', $validated['user_id'])->firstOrFail();
-            $validated['user_id'] = $user->id;
-        } else {
-            // Auto-création d'un compte Utilisateur Animateur pour la connexion mobile (Téléphone + 12345678)
-            $profilCatechisteId = \App\Models\Profil::where('code', 'CATECHISTE')->value('id');
-            $name = trim("{$validated['nom']} {$validated['prenoms']}");
-            $email = $validated['email'] ?? ('animateur_' . preg_replace('/[^0-9]/', '', $validated['telephone'] ?? uniqid()) . '@catheo.ci');
-
-            $user = User::create([
-                'name' => $name,
-                'email' => $email,
-                'telephone' => $validated['telephone'] ?? null,
-                'password' => \Illuminate\Support\Facades\Hash::make('12345678'),
-                'user_type' => 'animateur',
-                'statut' => 'actif',
-                'profil_id' => $profilCatechisteId,
-                'paroisse_configuration_id' => $paroisseId,
-            ]);
-            $validated['user_id'] = $user->id;
-        }
-
+        $validated['sexe'] = strtoupper($validated['sexe']);
+        $validated['statut'] = strtolower($validated['statut'] ?? 'actif');
         $validated['paroisse_configuration_id'] = $paroisseId;
 
+        // Mot de passe pour connexion directe dans la table animateurs
+        $rawPassword = $validated['password'] ?? '12345678';
+        $validated['password'] = Hash::make($rawPassword);
+
         $animateur = Animateur::create($validated);
-        $animateur->load('user');
 
         return response()->json([
-            'status' => 'success',
-            'message' => 'Animateur / Catéchiste créé avec succès. Compte mobile activé (Mot de passe: 12345678).',
-            'data' => new AnimateurResource($animateur),
+            'status'  => 'success',
+            'message' => 'Animateur créé avec succès. Mot de passe de connexion initial : ' . $rawPassword,
+            'data'    => new AnimateurResource($animateur),
         ], 201);
     }
 
     /**
      * Affichage d'un animateur.
      */
-    public function show(Request $request, Animateur $animateur): JsonResponse
+    public function show(Request $request, mixed $animateur): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $animateur->paroisse_configuration_id);
-
-        $animateur->load('user');
+        $model = $this->resolveAnimateur($animateur);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         return response()->json([
             'status' => 'success',
-            'data' => new AnimateurResource($animateur),
+            'data'   => new AnimateurResource($model),
         ]);
     }
 
     /**
      * Mise à jour d'un animateur.
      */
-    public function update(Request $request, Animateur $animateur): JsonResponse
+    public function update(Request $request, mixed $animateur): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $animateur->paroisse_configuration_id);
+        $model = $this->resolveAnimateur($animateur);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $validated = $request->validate([
-            'user_id' => ['nullable', 'string', 'exists:users,uuid'],
-            'matricule' => ['nullable', 'string', 'max:50'],
-            'nom' => ['sometimes', 'required', 'string', 'max:255'],
-            'prenoms' => ['sometimes', 'required', 'string', 'max:255'],
-            'sexe' => ['sometimes', 'required', 'string', 'in:M,F'],
-            'telephone' => ['nullable', 'string', 'max:30'],
-            'email' => ['nullable', 'string', 'email', 'max:255'],
+            'nom'        => ['sometimes', 'required', 'string', 'max:255'],
+            'prenoms'    => ['sometimes', 'required', 'string', 'max:255'],
+            'sexe'       => ['sometimes', 'required', 'string', 'in:M,F,m,f'],
+            'telephone'  => ['nullable', 'string', 'max:30'],
+            'email'      => ['nullable', 'string', 'email', 'max:255'],
             'profession' => ['nullable', 'string', 'max:255'],
-            'statut' => ['nullable', 'string', 'in:actif,inactif'],
+            'statut'     => ['nullable', 'string'],
+            'password'   => ['nullable', 'string', 'min:6'],
         ]);
 
-        if (array_key_exists('user_id', $validated)) {
-            if ($validated['user_id']) {
-                $user = User::where('uuid', $validated['user_id'])->firstOrFail();
-                $validated['user_id'] = $user->id;
-            } else {
-                $validated['user_id'] = null;
-            }
+        if (isset($validated['sexe'])) {
+            $validated['sexe'] = strtoupper($validated['sexe']);
+        }
+        if (isset($validated['statut'])) {
+            $validated['statut'] = strtolower($validated['statut']);
+        }
+        if (!empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        } else {
+            unset($validated['password']);
         }
 
-        $animateur->update($validated);
-        $animateur->load('user');
+        $model->update($validated);
+        $model->refresh();
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Animateur mis à jour avec succès.',
-            'data' => new AnimateurResource($animateur),
+            'data'    => new AnimateurResource($model),
         ]);
     }
 
     /**
-     * Activer / Désactiver un animateur.
+     * Activer / Désactiver un animateur (ou bascule statut).
      */
-    public function updateStatus(Request $request, Animateur $animateur): JsonResponse
+    public function updateStatus(Request $request, mixed $animateur): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $animateur->paroisse_configuration_id);
+        $model = $this->resolveAnimateur($animateur);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
-        $validated = $request->validate([
-            'statut' => ['required', 'string', 'in:actif,inactif'],
-        ]);
+        if ($request->filled('statut')) {
+            $nouveauStatut = strtolower($request->statut);
+        } else {
+            $current = strtolower($model->statut ?? 'actif');
+            $nouveauStatut = ($current === 'actif') ? 'inactif' : 'actif';
+        }
 
-        $animateur->update(['statut' => $validated['statut']]);
+        $model->update(['statut' => $nouveauStatut]);
+        $model->refresh();
 
         return response()->json([
-            'status' => 'success',
-            'message' => 'Statut de l\'animateur mis à jour avec succès.',
-            'data' => new AnimateurResource($animateur),
+            'status'  => 'success',
+            'message' => "Le statut de l'animateur est désormais {$nouveauStatut}.",
+            'data'    => new AnimateurResource($model),
         ]);
     }
 
     /**
      * Suppression d'un animateur.
      */
-    public function destroy(Request $request, Animateur $animateur): JsonResponse
+    public function destroy(Request $request, mixed $animateur): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $animateur->paroisse_configuration_id);
+        $model = $this->resolveAnimateur($animateur);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
-        $animateur->delete();
+        $model->delete();
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Animateur supprimé avec succès.',
         ]);
+    }
+
+    /**
+     * Résout l'instance du modèle depuis un objet injecté, un UUID ou un ID numérique.
+     */
+    private function resolveAnimateur(mixed $animateur): Animateur
+    {
+        if ($animateur instanceof Animateur && $animateur->exists) {
+            return $animateur;
+        }
+
+        $identifier = is_object($animateur) ? ($animateur->uuid ?? $animateur->id ?? null) : $animateur;
+
+        return Animateur::where('uuid', $identifier)
+            ->orWhere('id', $identifier)
+            ->firstOrFail();
     }
 
     private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
@@ -198,3 +206,4 @@ class AnimateurController extends Controller
         }
     }
 }
+

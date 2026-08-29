@@ -16,7 +16,7 @@ class NiveauController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Niveau::with('section')->where('paroisse_configuration_id', $paroisseId);
 
@@ -25,7 +25,6 @@ class NiveauController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('nom', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
                   ->orWhere('description', 'like', "%{$search}%");
             });
         }
@@ -59,15 +58,13 @@ class NiveauController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'section_id' => ['required', 'string', 'exists:sections,uuid'],
             'nom' => ['required', 'string', 'max:255'],
-            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'statut' => ['nullable', 'string', 'in:actif,inactif'],
-            'duree_annees' => ['nullable', 'integer', 'min:1'],
             'ordre_affichage' => ['nullable', 'integer'],
         ]);
 
@@ -111,10 +108,8 @@ class NiveauController extends Controller
         $validated = $request->validate([
             'section_id' => ['sometimes', 'required', 'string', 'exists:sections,uuid'],
             'nom' => ['sometimes', 'required', 'string', 'max:255'],
-            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'statut' => ['nullable', 'string', 'in:actif,inactif'],
-            'duree_annees' => ['nullable', 'integer', 'min:1'],
             'ordre_affichage' => ['nullable', 'integer'],
         ]);
 

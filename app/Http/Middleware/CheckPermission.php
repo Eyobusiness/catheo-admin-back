@@ -32,8 +32,8 @@ class CheckPermission
             ], 401);
         }
 
-        // Vérification de permission via la méthode unifiée du modèle User
-        if ($user->hasPermission($permission)) {
+        // Vérification de permission via la méthode unifiée du modèle User (ou autorisation par défaut pour les acteurs mobiles)
+        if (!method_exists($user, 'hasPermission') || $user->hasPermission($permission)) {
             return $next($request);
         }
 

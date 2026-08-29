@@ -4,7 +4,10 @@
  * Compatible Angular 17+ / RxJS / Reactive Forms
  */
 
-// Global API Generic Response Wrappers
+// ==========================================
+// 0. GLOBAL API GENERIC RESPONSE WRAPPERS
+// ==========================================
+
 export interface ApiResponse<T> {
   status: 'success' | 'error';
   message?: string;
@@ -34,8 +37,6 @@ export interface PaginationMeta {
 // ==========================================
 // 1. AUTHENTIFICATION & COMPTES UTILISATEURS
 // ==========================================
-
-// --- AUTHENTIFICATION GOUVERNÉE (ADMIN, ANIMATEURS, PARENTS) ---
 
 export interface LoginRequestDto {
   login?: string;
@@ -94,6 +95,7 @@ export interface LoginResponseDto {
   token_type: string;
   user_type?: 'admin' | 'animateur' | 'parent';
   user: UserDto;
+  annee_courante?: AnneeCatecheseDto | null;
   menus?: AccessibleMenuDto[];
 }
 
@@ -102,6 +104,7 @@ export interface AdminLoginResponseDto {
   token_type: string;
   user_type: 'admin';
   user: UserDto;
+  annee_courante?: AnneeCatecheseDto | null;
   menus?: AccessibleMenuDto[];
 }
 
@@ -128,7 +131,8 @@ export interface AnimateurLoginResponseDto {
 
 export interface CatechumeneParentAuthDto {
   id: string;
-  code_catechumene: string;
+  matricule: string;
+  code_catechumene?: string;
   nom: string;
   prenoms: string;
   sexe: 'M' | 'F';
@@ -160,6 +164,7 @@ export interface UserDto {
   telephone?: string;
   statut: 'actif' | 'inactif' | 'suspendu';
   profil?: ProfilDto;
+  catechese?: CatecheseConfigurationDto;
   paroisse?: ParoisseConfigurationDto;
   created_at: string;
 }
@@ -278,13 +283,16 @@ export interface UpdateProfilDto {
 }
 
 // ==========================================
-// 2. CONFIGURATION PAROISSIALE
+// 2. CONFIGURATION DE LA CATECHESE (INSTITUTIONNELLE)
 // ==========================================
 
-export interface ParoisseConfigurationDto {
+export interface CatecheseConfigurationDto {
   id: string;
-  nom: string;
+  nom_paroisse: string;
+  nom?: string; // Rétro-compatibilité
   code_paroisse: string;
+  prefixe_matricule?: string;
+  prefixe_recu?: string;
   diocese?: string;
   doyenne?: string;
   ville?: string;
@@ -293,14 +301,23 @@ export interface ParoisseConfigurationDto {
   email?: string;
   site_web?: string;
   adresse?: string;
-  logo_url?: string;
+  logo_paroisse?: string;
+  logo_paroisse_url?: string;
+  logo_catechese?: string;
+  logo_catechese_url?: string;
+  logo_url?: string; // Rétro-compatibilité
   cure_nom?: string;
   coordination_nom?: string;
   statut: 'actif' | 'inactif' | 'suspendu';
+  created_at?: string;
 }
 
-export interface UpdateParoisseConfigurationDto {
+export interface UpdateCatecheseConfigurationDto {
+  nom_paroisse?: string;
   nom?: string;
+  code_paroisse?: string;
+  prefixe_matricule?: string;
+  prefixe_recu?: string;
   diocese?: string;
   doyenne?: string;
   ville?: string;
@@ -311,24 +328,33 @@ export interface UpdateParoisseConfigurationDto {
   adresse?: string;
   cure_nom?: string;
   coordination_nom?: string;
+  statut?: 'actif' | 'inactif' | 'suspendu';
+  logo_paroisse?: File | string | null;
+  logo_catechese?: File | string | null;
+  logo?: File | string | null;
 }
+
+// Alias de rétro-compatibilité
+export type ParoisseConfigurationDto = CatecheseConfigurationDto;
+export type UpdateParoisseConfigurationDto = UpdateCatecheseConfigurationDto;
 
 export interface ApparenceConfigurationDto {
   id: string;
   couleur_principale: string; // Ex: "#4F46E5"
   couleur_secondaire: string; // Ex: "#D97706"
   police_caracteres: 'Inter' | 'Roboto' | 'Outfit' | 'Poppins' | 'Nunito' | 'DM Sans';
-  logo_url?: string;
   entete_document?: string;
   pied_page_document?: string;
+  created_at?: string;
   updated_at?: string;
+  created_by?: string;
+  updated_by?: string;
 }
 
 export interface UpdateApparenceConfigurationDto {
   couleur_principale?: string;
   couleur_secondaire?: string;
   police_caracteres?: 'Inter' | 'Roboto' | 'Outfit' | 'Poppins' | 'Nunito' | 'DM Sans';
-  logo_url?: string;
   entete_document?: string;
   pied_page_document?: string;
 }
@@ -346,35 +372,30 @@ export interface SauvegardeDto {
   created_at?: string;
 }
 
-export interface ResponsableParoisseDto {
+export interface ResponsableCatecheseDto {
   id: string;
   nom_prenoms: string;
   fonction: string;
-  titre?: string;
   telephone?: string;
-  email?: string;
-  signature_url?: string;
-  ordre_affichage?: number;
+  statut: 'actif' | 'inactif';
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  updated_by?: string;
 }
 
-export interface CreateResponsableParoisseDto {
+export interface CreateResponsableCatecheseDto {
   nom_prenoms: string;
   fonction: string;
-  titre?: string;
   telephone?: string;
-  email?: string;
-  signature_url?: string;
-  ordre_affichage?: number;
+  statut?: 'actif' | 'inactif';
 }
 
-export interface UpdateResponsableParoisseDto {
+export interface UpdateResponsableCatecheseDto {
   nom_prenoms?: string;
   fonction?: string;
-  titre?: string;
   telephone?: string;
-  email?: string;
-  signature_url?: string;
-  ordre_affichage?: number;
+  statut?: 'actif' | 'inactif';
 }
 
 // ==========================================
@@ -386,21 +407,26 @@ export interface AnneeCatecheseDto {
   libelle: string;
   date_debut: string;
   date_fin: string;
-  est_active: boolean;
-  statut: 'active' | 'cloturee';
+  statut: 'preparation' | 'active' | 'cloturee';
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateAnneeCatecheseDto {
   libelle: string;
   date_debut: string;
   date_fin: string;
+  statut?: 'preparation' | 'active' | 'cloturee';
 }
+
+export interface UpdateAnneeCatecheseDto extends Partial<CreateAnneeCatecheseDto> {}
+
 export interface SectionDto {
   id: string;
   nom: string;
   code?: string;
   description?: string;
-  statut: 'Actif' | 'Inactif';
+  statut: 'Actif' | 'Inactif' | 'actif' | 'inactif';
   statut_code: 'actif' | 'inactif';
   ordre_affichage?: number;
   niveaux_count?: number;
@@ -425,11 +451,9 @@ export interface UpdateSectionDto {
 export interface NiveauDto {
   id: string;
   nom: string;
-  
   description?: string;
-  statut: 'Actif' | 'Inactif';
+  statut: 'Actif' | 'Inactif' | 'actif' | 'inactif';
   statut_code: 'actif' | 'inactif';
-  
   ordre_affichage?: number;
   section?: SectionDto;
 }
@@ -437,7 +461,6 @@ export interface NiveauDto {
 export interface CreateNiveauDto {
   section_id: string;
   nom: string;
-  
   description?: string;
   statut?: 'actif' | 'inactif';
   ordre_affichage?: number;
@@ -446,10 +469,8 @@ export interface CreateNiveauDto {
 export interface UpdateNiveauDto {
   section_id?: string;
   nom?: string;
-  
   description?: string;
   statut?: 'actif' | 'inactif';
- 
   ordre_affichage?: number;
 }
 
@@ -467,7 +488,11 @@ export interface CreateClasseDto {
   niveau_id: string;
   annee_catechese_id?: string;
   nom: string;
-  capacite_max?: number; 
+  capacite_max?: number;
+}
+
+export interface UpdateClasseDto extends Partial<CreateClasseDto> {
+  statut?: 'active' | 'inactive';
 }
 
 export interface AnimateurDto {
@@ -475,12 +500,17 @@ export interface AnimateurDto {
   matricule?: string;
   nom: string;
   prenoms: string;
+  nom_complet?: string;
   sexe: 'M' | 'F';
-  telephone?: string;
-  email?: string;
-  profession?: string;
+  telephone?: string | null;
+  email?: string | null;
+  profession?: string | null;
   statut: 'actif' | 'inactif';
   user?: UserDto;
+  dernier_login_at?: string | null;
+  affectations_count?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateAnimateurDto {
@@ -490,43 +520,90 @@ export interface CreateAnimateurDto {
   telephone?: string;
   email?: string;
   profession?: string;
+  statut?: 'actif' | 'inactif';
+  password?: string;
   create_user_account?: boolean;
+}
+
+export interface UpdateAnimateurDto {
+  nom?: string;
+  prenoms?: string;
+  sexe?: 'M' | 'F';
+  telephone?: string;
+  email?: string;
+  profession?: string;
+  statut?: 'actif' | 'inactif';
+  password?: string;
 }
 
 export interface UpdateAnimateurStatusDto {
   statut: 'actif' | 'inactif';
 }
 
+export interface LoginAnimateurDto {
+  login: string; // telephone ou email
+  password: string;
+}
+
 export interface AffectationAnimateurDto {
   id: string;
-  animateur: AnimateurDto;
-  classe: ClasseDto;
-  role: 'principal' | 'adjoint' | 'assistant';
-  date_affectation: string;
+  role?: 'principal' | 'adjoint' | 'assistant';
+  role_animateur?: 'principal' | 'adjoint';
+  animateur?: AnimateurDto;
+  classe?: ClasseDto;
+  annee_catechese?: AnneeCatecheseDto;
+  date_affectation?: string;
+  created_at?: string;
 }
 
 export interface CreateAffectationAnimateurDto {
   animateur_id: string;
+  annee_catechese_id?: string;
   classe_id: string;
   role?: 'principal' | 'adjoint' | 'assistant';
+  role_animateur?: 'principal' | 'adjoint';
+}
+
+export interface UpdateAffectationAnimateurDto {
+  animateur_id?: string;
+  annee_catechese_id?: string;
+  classe_id?: string;
+  role_animateur?: 'principal' | 'adjoint';
 }
 
 export interface ModuleTrimestrielDto {
   id: string;
-  trimestre: 'T1' | 'T2' | 'T3';
+  trimestre?: 'T1' | 'T2' | 'T3';
+  numero_trimestre?: number;
+  nom?: string;
   libelle: string;
   date_debut: string;
   date_fin: string;
-  
+  statut?: 'en_cours' | 'termine';
+  annee_catechese?: AnneeCatecheseDto;
+  created_at?: string;
 }
 
 export interface CreateModuleTrimestrielDto {
-  annee_catechese_id: string;
-  trimestre: 'T1' | 'T2' | 'T3';
+  annee_catechese_id?: string;
+  trimestre?: 'T1' | 'T2' | 'T3';
+  numero_trimestre?: number;
+  nom?: string;
   libelle: string;
   date_debut: string;
   date_fin: string;
-  
+  statut?: 'en_cours' | 'termine';
+}
+
+export interface UpdateModuleTrimestrielDto {
+  annee_catechese_id?: string;
+  trimestre?: 'T1' | 'T2' | 'T3';
+  numero_trimestre?: number;
+  nom?: string;
+  libelle?: string;
+  date_debut?: string;
+  date_fin?: string;
+  statut?: 'en_cours' | 'termine';
 }
 
 // ──────────────────────────────────────────
@@ -535,10 +612,10 @@ export interface CreateModuleTrimestrielDto {
 export interface CebDto {
   id: string;
   nom: string;
-  responsable?: string;
-  telephone?: string;
-  adresse?: string;
-  description?: string;
+  responsable?: string | null;
+  telephone?: string | null;
+  adresse?: string | null;
+  description?: string | null;
   statut: 'Active' | 'Inactive';
   statut_code: 'active' | 'inactive';
   total_inscriptions?: number;
@@ -569,9 +646,9 @@ export interface UpdateCebDto {
 export interface MouvementDto {
   id: string;
   nom: string;
-  responsable?: string;
-  telephone?: string;
-  description?: string;
+  responsable?: string | null;
+  telephone?: string | null;
+  description?: string | null;
   statut: 'Active' | 'Inactive';
   statut_code: 'active' | 'inactive';
   total_inscriptions?: number;
@@ -597,24 +674,42 @@ export interface UpdateMouvementDto {
 // ──────────────────────────────────────────
 // Calendrier Pastoral
 // ──────────────────────────────────────────
-export type CibleTypeCalendrier = 'TOUS' | 'ANIMATEURS' | 'SECTION' | 'NIVEAU' | 'CLASSE' | 'CEB' | 'MOUVEMENT';
+export type CibleTypeCalendrier =
+  | 'TOUS'
+  | 'Tous'
+  | 'ANIMATEURS'
+  | 'Animateurs'
+  | 'Catéchumènes'
+  | 'SECTION'
+  | 'Section'
+  | 'NIVEAU'
+  | 'Niveau'
+  | 'CLASSE'
+  | 'Classe'
+  | 'CEB'
+  | 'MOUVEMENT'
+  | string;
+
 export type StatutCalendrier = 'Planifié' | 'Réalisé' | 'Annulé' | 'planifie' | 'realise' | 'annule';
 
 export interface CalendrierDto {
   id: string;
+  annee_catechese_id?: string;
   titre: string;
   type: string;
   date: string;
-  heure_debut?: string;
-  heure_fin?: string;
-  lieu?: string;
+  heure_debut?: string | null;
+  heure_fin?: string | null;
+  lieu?: string | null;
   cible_type: CibleTypeCalendrier;
-  cible_id?: string;
-  cible_nom?: string;
-  description?: string;
-  statut: 'Planifié' | 'Réalisé' | 'Annulé';
+  cible_id?: string | null;
+  cible_ids?: string[] | null;
+  cible_nom?: string | null;
+  description?: string | null;
+  statut: 'Planifié' | 'Réalisé' | 'Annulé' | string;
   annee_catechese?: AnneeCatecheseDto;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateCalendrierDto {
@@ -627,6 +722,8 @@ export interface CreateCalendrierDto {
   lieu?: string;
   cible_type?: CibleTypeCalendrier;
   cible_id?: string;
+  cible_ids?: string[];
+  cible_nom?: string;
   description?: string;
   statut?: StatutCalendrier;
 }
@@ -641,8 +738,14 @@ export interface UpdateCalendrierDto {
   lieu?: string;
   cible_type?: CibleTypeCalendrier;
   cible_id?: string;
+  cible_ids?: string[];
+  cible_nom?: string;
   description?: string;
   statut?: StatutCalendrier;
+}
+
+export interface UpdateCalendrierStatutDto {
+  statut: 'Planifié' | 'Réalisé' | 'Annulé' | string;
 }
 
 // ==========================================
@@ -685,10 +788,15 @@ export interface UpdateCampagnePreinscriptionDto {
   statut?: 'ouverte' | 'fermee' | 'suspendue';
 }
 
+export type PreinscriptionStatus = 'en_attente' | 'validee' | 'rejetee' | 'a_affecter';
+export type TypeDemandePreinscription = 'nouvelle_inscription' | 'reinscription' | 'premiere_inscription';
+
 export interface PreinscriptionDto {
   id: string;
+  uuid?: string;
   code_dossier: string;
-  type_demande: 'nouvelle_inscription' | 'reinscription' | 'premiere_inscription';
+  type_demande: TypeDemandePreinscription;
+  statut: PreinscriptionStatus;
   nom: string;
   prenoms: string;
   nom_complet?: string;
@@ -698,6 +806,7 @@ export interface PreinscriptionDto {
   adresse?: string;
   telephone?: string;
   photo_url?: string;
+  photo_profil?: string;
   situation_matrimoniale?: string;
   nom_pere?: string;
   telephone_pere?: string;
@@ -713,20 +822,29 @@ export interface PreinscriptionDto {
   sexe_parrain?: 'M' | 'F';
   telephone_parrain?: string;
   acte_naissance_url?: string;
-  statut: 'en_attente' | 'validee' | 'rejetee' | 'a_affecter';
   notes_validation?: string;
-  campagne?: CampagnePreinscriptionDto;
-  annee_catechese?: AnneeCatecheseDto;
-  section_souhaite?: SectionDto;
-  niveau_souhaite?: NiveauDto;
-  created_at: string;
-}
-
-export interface SubmitPreinscriptionDto {
-  campagne_id: string;
+  campagne_id?: string;
+  campagne_preinscription_id?: string;
+  annee_catechese_id?: string;
   section_souhaite_id?: string;
   niveau_souhaite_id?: string;
-  type_demande?: 'nouvelle_inscription' | 'reinscription' | 'premiere_inscription';
+  campagne?: CampagnePreinscriptionDto | any;
+  annee_catechese?: AnneeCatecheseDto | any;
+  section_souhaite?: SectionDto | any;
+  niveau_souhaite?: NiveauDto | any;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreatePreinscriptionDto {
+  campagne_id?: string;
+  campagne_preinscription_id?: string;
+  annee_catechese_id?: string;
+  section_souhaite_id?: string;
+  section_id?: string;
+  niveau_souhaite_id?: string;
+  niveau_id?: string;
+  type_demande?: TypeDemandePreinscription;
   nom: string;
   prenoms: string;
   sexe: 'M' | 'F';
@@ -750,11 +868,18 @@ export interface SubmitPreinscriptionDto {
   sexe_parrain?: 'M' | 'F';
   telephone_parrain?: string;
   acte_naissance_url?: string;
+  statut?: PreinscriptionStatus;
+  notes_validation?: string;
 }
+
+export interface SubmitPreinscriptionDto extends CreatePreinscriptionDto {}
+
+export interface UpdatePreinscriptionDto extends Partial<CreatePreinscriptionDto> {}
 
 export interface ValiderPreinscriptionDto {
   niveau_id: string;
   classe_id?: string;
+  catechumene_id?: string;
   frais_payes?: boolean;
   notes_validation?: string;
 }
@@ -765,8 +890,7 @@ export interface RejeterPreinscriptionDto {
 
 export interface CatechumeneDto {
   id: string;
-  code_catechumene: string;
-  matricule?: string;
+  matricule: string;
   nom: string;
   prenoms: string;
   nom_complet?: string;
@@ -965,6 +1089,10 @@ export interface UpdateParrainMarraineDto {
 
 export interface MutationCatechumeneDto {
   id: string;
+  catechumene_id?: string;
+  annee_catechese_id?: string;
+  matricule?: string;
+  nom_complet?: string;
   paroisse_origine_nom: string;
   paroisse_destination_nom: string;
   motif?: string;
@@ -973,82 +1101,204 @@ export interface MutationCatechumeneDto {
   catechumene?: CatechumeneDto;
   annee_catechese?: AnneeCatecheseDto;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateMutationCatechumeneDto {
   catechumene_id: string;
-  annee_catechese_id: string;
-  paroisse_origine_nom: string;
+  annee_catechese_id?: string;
+  paroisse_origine_nom?: string;
   paroisse_destination_nom: string;
   motif?: string;
-  date_mutation: string;
+  date_mutation?: string;
+  statut?: 'demande' | 'approuve' | 'refuse';
 }
 
 export interface UpdateMutationCatechumeneDto {
-  statut: 'approuve' | 'refuse';
+  paroisse_origine_nom?: string;
+  paroisse_destination_nom?: string;
+  motif?: string;
+  date_mutation?: string;
+  statut?: 'demande' | 'approuve' | 'refuse';
 }
 
 // ==========================================
 // 5. SÉANCES, PRÉSENCES & ÉVALUATIONS
 // ==========================================
 
-export interface SeanceDto {
-  id: string;
-  titre_lecon: string;
-  date_seance: string;
-  duree_minutes: number;
-  classe?: ClasseDto;
-  animateur?: AnimateurDto;
-  total_presences?: number;
+export type StatutSeance = 'planifiee' | 'effectuee' | 'annulee';
+export type StatutPresence = 'present' | 'absent' | 'retard' | 'excuse';
+
+export interface PresenceItemDto {
+  id?: string;
+  catechumene_id: string;
+  catechumene?: CatechumeneDto;
+  statut_presence?: StatutPresence;
+  est_present?: boolean;
+  remarque?: string;
+  motif_absence?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface CreateSeanceDto {
-  classe_id: string;
-  titre_lecon: string;
-  date_seance: string;
-  duree_minutes?: number;
+export interface PresenceBatchItemDto {
+  catechumene_id: string;
+  statut_presence?: StatutPresence;
+  est_present?: boolean;
+  remarque?: string;
+  motif_absence?: string;
 }
 
 export interface RecordPresencesBatchDto {
-  presences: {
-    catechumene_id: string;
-    est_present: boolean;
-    motif_absence?: string;
-  }[];
+  presences: PresenceBatchItemDto[];
 }
 
+export interface SeanceDto {
+  id: string;
+  titre?: string;
+  titre_lecon?: string;
+  date_seance: string;
+  heure_debut?: string;
+  heure_fin?: string;
+  duree_minutes?: number;
+  description?: string;
+  statut?: StatutSeance;
+  annee_catechese_id?: string;
+  annee_catechese?: AnneeCatecheseDto;
+  classe_id?: string;
+  classe?: ClasseDto;
+  animateur_id?: string;
+  animateur?: AnimateurDto;
+  total_presences?: number;
+  total_presents?: number;
+  total_absents?: number;
+  presences?: PresenceItemDto[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateSeanceDto {
+  annee_catechese_id?: string;
+  classe_id: string;
+  titre?: string;
+  titre_lecon?: string;
+  date_seance: string;
+  heure_debut?: string;
+  heure_fin?: string;
+  duree_minutes?: number;
+  description?: string;
+  statut?: StatutSeance;
+}
+
+export interface UpdateSeanceDto extends Partial<CreateSeanceDto> {}
+
+export interface UpdateSeanceStatutDto {
+  statut: StatutSeance;
+}
+
+export type EvaluationType =
+  | 'Interrogation'
+  | 'Devoir'
+  | 'Composition'
+  | 'Examen'
+  | 'Oral'
+  | 'devoir'
+  | 'interrogation'
+  | 'examen'
+  | 'comportement'
+  | string;
+
+export type EvaluationPeriode = 'Trimestre 1' | 'Trimestre 2' | 'Trimestre 3' | 'Annuelle' | string;
+export type EvaluationStatus = 'Actif' | 'Inactif' | 'actif' | 'inactif';
+
 export interface EvaluationStatsDto {
-  moyenne_classe: number;
-  plus_forte_note: number;
-  plus_faible_note: number;
-  saisies_effectuees: number;
-  total_eleves: number;
-  saisies_ratio: string;
+  moyenne_classe?: number;
+  plus_forte_note?: number;
+  plus_faible_note?: number;
+  saisies_effectuees?: number;
+  total_eleves?: number;
+  saisies_ratio?: string;
 }
 
 export interface EvaluationDto {
   id: string;
-  titre: string;
-  type_eval: string;
-  type_eval_code: string;
-  coefficient: number;
-  note_max: number;
+  nom?: string;
+  titre?: string;
+  type?: EvaluationType;
+  type_eval?: EvaluationType;
+  type_eval_code?: string;
+  periode?: EvaluationPeriode;
+  date?: string;
   date_evaluation?: string;
-  stats?: EvaluationStatsDto;
+  coefficient?: number;
+  coefficient_label?: string;
+  bareme?: number;
+  note_max?: number;
+  bareme_label?: string;
+  statut?: EvaluationStatus;
+  statut_code?: 'actif' | 'inactif';
+  anneePastorale?: string;
+  annee_catechese_id?: string;
   annee_catechese?: AnneeCatecheseDto;
+  classe_id?: string;
+  classe?: ClasseDto | any;
+  section?: string;
+  niveau?: string;
+  module_trimestriel_id?: string;
   module_trimestriel?: ModuleTrimestrielDto;
-  classe?: ClasseDto;
-  notes?: NoteDto[];
+  observation?: string;
+  description?: string;
+  stats?: EvaluationStatsDto;
+  notes?: NoteDto[] | any[];
   created_at?: string;
+  updated_at?: string;
+}
+
+export type EvaluationItem = EvaluationDto;
+
+export interface CreateEvaluationDto {
+  nom?: string;
+  titre?: string;
+  type?: EvaluationType;
+  type_eval?: EvaluationType;
+  type_eval_code?: string;
+  periode?: EvaluationPeriode;
+  date?: string;
+  date_evaluation?: string;
+  coefficient?: number;
+  bareme?: number;
+  note_max?: number;
+  anneePastorale?: string;
+  statut?: EvaluationStatus;
+  observation?: string;
+  section?: string;
+  niveau?: string;
+  classe?: string;
+  classe_id?: string;
+  annee_catechese_id?: string;
+  module_trimestriel_id?: string;
+}
+
+export interface UpdateEvaluationDto extends Partial<CreateEvaluationDto> {}
+
+export interface UpdateEvaluationStatutDto {
+  statut?: EvaluationStatus | 'actif' | 'inactif';
+  status?: EvaluationStatus | 'actif' | 'inactif';
 }
 
 export interface NoteDto {
   id: string;
   catechumene_id?: string;
+  catechumeneId?: string;
+  matricule?: string;
   code_catechumene?: string;
+  nom?: string;
+  prenoms?: string;
   nom_prenoms?: string;
-  note_obtenue: number;
-  appreciation?: string;
+  nomPrenoms?: string;
+  note_obtenue?: number | null;
+  note?: number | null;
+  appreciation?: string | null;
   catechumene?: CatechumeneDto;
   created_at?: string;
 }
@@ -1064,16 +1314,7 @@ export interface NoteItemGridDto {
   note_id?: string;
 }
 
-export interface CreateEvaluationDto {
-  annee_catechese_id: string;
-  module_trimestriel_id: string;
-  classe_id: string;
-  titre: string;
-  type_eval: 'devoir' | 'interrogation' | 'examen' | 'comportement';
-  coefficient?: number;
-  note_max?: number;
-  date_evaluation?: string;
-}
+export interface CatechumeneNoteDto extends NoteDto {}
 
 export interface RecordNotesBatchDto {
   notes: {
@@ -1081,6 +1322,10 @@ export interface RecordNotesBatchDto {
     note_obtenue: number;
     appreciation?: string;
   }[];
+}
+
+export interface BatchSaveNotesDto {
+  notes: CatechumeneNoteDto[];
 }
 
 export interface BulletinTrimestrielDto {
@@ -1100,9 +1345,18 @@ export interface CalculerBulletinDto {
   module_trimestriel_id: string;
 }
 
+export type DecisionStatus =
+  | 'Admis'
+  | 'Non admis'
+  | 'Ajourné'
+  | 'admis_niveau_superieur'
+  | 'redoublement'
+  | 'reorientation'
+  | string;
+
 export interface DecisionFinAnneeDto {
   id: string;
-  decision_finale: 'admis_niveau_superieur' | 'redoublement' | 'reorientation';
+  decision_finale: 'admis_niveau_superieur' | 'redoublement' | 'reorientation' | string;
   observations?: string;
   catechumene?: CatechumeneDto;
 }
@@ -1110,25 +1364,87 @@ export interface DecisionFinAnneeDto {
 export interface CreateDecisionFinAnneeDto {
   catechumene_id: string;
   annee_catechese_id?: string;
-  decision_finale: 'admis_niveau_superieur' | 'redoublement' | 'reorientation';
+  decision_finale: 'admis_niveau_superieur' | 'redoublement' | 'reorientation' | string;
   observations?: string;
 }
 
+export interface BilanAnnuelItem {
+  id?: string;
+  catechumeneId: string;
+  catechumene_id?: string;
+  matricule: string;
+  nomPrenoms: string;
+  nom_prenoms?: string;
+  section: string;
+  niveau: string;
+  classe: string;
+  classe_id?: string;
+  anneePastorale: string;
+  annee_pastorale?: string;
+  moyenneGenerale: number;
+  moyenne_annuelle?: number;
+  presenceCoursPct: number;
+  presence_cours_pct?: number;
+  presenceMesse: string;
+  presence_messe?: string;
+  presenceCEB: string;
+  presence_ceb?: string;
+  presenceMouvement: string;
+  presence_mouvement?: string;
+  decision: DecisionStatus;
+  decision_code?: 'admis' | 'redouble' | 'exclu' | 'sacrement_valide';
+  observations?: string;
+}
+
+export interface ValiderBilanDto {
+  annee_pastorale: string;
+  classe: string;
+  valide?: boolean;
+}
+
+export interface SaveDecisionFinAnneeDto {
+  catechumeneId?: string;
+  catechumene_id?: string;
+  inscription_annuelle_id?: string;
+  moyenneGenerale?: number;
+  moyenne_annuelle?: number;
+  decision: DecisionStatus | 'admis' | 'redouble' | 'exclu' | 'sacrement_valide';
+  presenceCoursPct?: number;
+  presenceMesse?: string;
+  presenceCEB?: string;
+  presenceMouvement?: string;
+  date_decision?: string;
+}
+
 // ====================================================================================
-// 6. FINANCES & CAISSE (Conforme à 100% aux 4 écrans du prototype Cathéo Admin)
+// 6. FINANCES & CAISSE (Conforme à 100% aux écrans du prototype Cathéo Admin)
 // ====================================================================================
 
 // SCREEN 1 — Opérations (Paiements en attente)
 export interface OperationPaiementDto {
   id: string;
-  reference: string; // OP-2026-001
-  libelle: string; // Inscription annuelle Catéchèse
+  uuid: string;
+  reference: string; // OP-2026-0001
+  libelle: string; // Inscription annuelle Catéchèse / Baptême
   montant: number;
   montant_paye: number;
   echeance?: string;
   statut: 'en_attente' | 'partiellement_paye' | 'paye' | 'annule';
-  catechumene?: CatechumeneDto;
+  annee_catechese_id?: string;
+  catechumene_id?: string;
+  tarif_id?: string;
+  catechumene?: {
+    id: string;
+    uuid: string;
+    matricule: string;
+    nom: string;
+    prenoms: string;
+    nom_complet: string;
+  };
   tarif?: TarifDto;
+  annee_catechese?: AnneeCatecheseDto;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateOperationPaiementDto {
@@ -1140,17 +1456,32 @@ export interface CreateOperationPaiementDto {
   echeance?: string;
 }
 
+export interface PayerOperationDto {
+  mode_paiement: 'especes' | 'mobile_money' | 'wave' | 'mtn' | 'orange' | 'moov' | 'cheque' | 'virement';
+  reference_transaction?: string;
+  date_paiement?: string;
+  notes?: string;
+}
+
+export interface GenererOperationsParTarifDto {
+  tarif_id: string;
+}
+
 // SCREEN 2 — Caisse (Paiements encaissés & KPIs Trésorerie)
 export interface CaisseParoissialeDto {
   id: string;
-  reference?: string; // ENC-2026-0041
+  uuid?: string;
+  reference_document?: string; // REC-2026-0041
+  reference?: string; // REC-2026-0041
   date_mouvement: string;
   libelle: string;
+  categorie?: string;
   montant: number;
   mode_paiement?: string;
   caissier_nom?: string;
-  solde_apres: number;
+  solde_apres?: number;
   type_mouvement: 'entree' | 'recette' | 'sortie' | 'depense' | 'remboursement';
+  created_at?: string;
 }
 
 export interface CaisseKpiDto {
@@ -1165,76 +1496,171 @@ export interface RemboursementRequestDto {
   motif: string;
 }
 
-// SCREEN 3 — Versements à la Paroisse / au Curé (Reversements des recettes)
-export interface VersementCureDto {
+// SCREEN 3 — Versements de caisse
+export interface VersementDto {
   id: string;
-  reference: string; // VRS-2026-001
+  uuid?: string;
+  reference: string; // VRS-2026-0001
   periode_concernee: string; // Juin 2026
   montant_verse: number;
-  mode_remise: 'cheque' | 'especes' | 'virement';
+  mode_remise: 'cheque' | 'especes' | 'virement' | string;
   effectue_par?: string;
+  destinataire?: string;
   statut: 'valide' | 'en_attente' | 'annule';
+  annee_catechese_id?: string;
+  annee_libelle?: string;
   user?: UserDto;
-  created_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface CreateVersementCureDto {
+export interface CreateVersementDto {
   annee_catechese_id?: string;
   periode_concernee: string;
   montant_verse: number;
-  mode_remise: 'cheque' | 'especes' | 'virement';
+  mode_remise: 'cheque' | 'especes' | 'virement' | string;
   effectue_par?: string;
+  destinataire?: string;
 }
 
-export interface VersementCureKpiDto {
+export interface UpdateVersementDto extends Partial<CreateVersementDto> {
+  statut?: 'valide' | 'en_attente' | 'annule';
+}
+
+export interface VersementKpiDto {
   total_en_caisse: number;
   total_deja_verse: number;
   reste_a_reverser: number;
 }
 
+// Aliases
+export type VersementCureDto = VersementDto;
+export type CreateVersementCureDto = CreateVersementDto;
+export type VersementCureKpiDto = VersementKpiDto;
+
 // SCREEN 4 — Configuration des paiements (Tarifs par niveau)
 export interface TarifDto {
   id: string;
+  uuid: string;
   intitule: string;
+  nom?: string;
   description?: string;
   montant: number;
+  est_obligatoire: boolean;
+  type_tarif: string;
+  statut: 'actif' | 'inactif';
   periode_debut?: string;
   periode_fin?: string;
-  est_obligatoire: boolean;
-  type_tarif: 'inscription' | 'manuel' | 'uniforme' | 'examen' | 'retraite' | 'autre';
-  statut: 'actif' | 'inactif';
+  annee_catechese_id?: string;
+  anneeCatecheseId?: string;
+  annee_libelle?: string;
+  niveau_id?: string;
+  niveauId?: string;
+  niveau_nom?: string;
+  niveau_ids?: string[];
+  niveauxIds?: string[];
+  annee_catechese?: AnneeCatecheseDto;
+  niveau?: NiveauDto;
   niveaux?: NiveauDto[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateTarifDto {
+  annee_catechese_id?: string;
+  niveau_id?: string;
+  niveau_ids?: string[];
   intitule: string;
   description?: string;
   montant: number;
   periode_debut?: string;
   periode_fin?: string;
   est_obligatoire?: boolean;
-  type_tarif?: 'inscription' | 'manuel' | 'uniforme' | 'examen' | 'retraite' | 'autre';
-  niveau_uuids?: string[];
+  type_tarif: string;
+  statut?: 'actif' | 'inactif';
 }
+
+export interface UpdateTarifDto extends Partial<CreateTarifDto> {}
 
 // ==========================================
 // 7. COMMUNICATION, NOTIFICATIONS & AUDIT
 // ==========================================
 
+export type CibleTypeAnnonce =
+  | 'TOUS'
+  | 'Tous'
+  | 'ANIMATEURS'
+  | 'Animateurs'
+  | 'Catéchumènes'
+  | 'SECTION'
+  | 'Section'
+  | 'NIVEAU'
+  | 'Niveau'
+  | 'CLASSE'
+  | 'Classe'
+  | string;
+
+export type CanalCommunication = 'in_app' | 'app' | 'sms' | 'whatsapp' | 'email' | 'affichage' | 'tous' | string;
+export type StatutAnnonce = 'brouillon' | 'programmee' | 'publiee' | 'envoyee' | 'archivee' | string;
+export type PrioriteAnnonce = 'normale' | 'haute' | 'urgente' | string;
+
 export interface AnnonceDto {
   id: string;
   titre: string;
   contenu: string;
-  canal: 'sms' | 'whatsapp' | 'email' | 'affichage';
-  statut: 'brouillon' | 'programmee' | 'envoyee';
+  cible?: string;
+  cible_type: CibleTypeAnnonce;
+  cible_id?: string | null;
+  cible_ids?: string[] | null;
+  cible_nom?: string | null;
+  canal: CanalCommunication;
+  date_publication?: string;
   date_diffusion?: string;
+  heure_diffusion?: string | null;
+  date_expiration?: string | null;
+  priorite?: PrioriteAnnonce;
+  statut: StatutAnnonce;
+  est_lu?: boolean;
+  is_read?: boolean;
+  annee_catechese?: AnneeCatecheseDto;
+  section?: SectionDto;
+  niveau?: NiveauDto;
+  classe?: ClasseDto;
+  ceb?: CebDto;
+  mouvement?: MouvementDto;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateAnnonceDto {
+  annee_catechese_id?: string;
   titre: string;
   contenu: string;
-  canal?: 'sms' | 'whatsapp' | 'email' | 'affichage';
+  cible?: string;
+  cible_type?: CibleTypeAnnonce;
+  cible_id?: string;
+  cible_ids?: string[];
+  cible_nom?: string;
+  section_id?: string;
+  niveau_id?: string;
+  classe_id?: string;
+  ceb_id?: string;
+  mouvement_id?: string;
+  canal?: CanalCommunication;
+  date_publication?: string;
   date_diffusion?: string;
+  heure_diffusion?: string;
+  date_expiration?: string;
+  priorite?: PrioriteAnnonce;
+  statut?: StatutAnnonce;
+}
+
+export interface UpdateAnnonceDto extends Partial<CreateAnnonceDto> {}
+
+export interface NotificationFeedItemDto extends AnnonceDto {}
+
+export interface UnreadNotificationsCountDto {
+  unread_count: number;
 }
 
 export interface NotificationLogDto {
@@ -1305,3 +1731,274 @@ export interface ExportRequestDto {
   date_debut?: string;
   date_fin?: string;
 }
+
+// =====================================================================
+// 9. DOCUMENTS OFFICIELS (MODÈLES & GÉNÉRATION)
+// =====================================================================
+
+export type TypeDocumentOfficiel =
+  | 'certificat'
+  | 'attestation'
+  | 'convocation'
+  | 'carte'
+  | 'fiche'
+  | 'autre'
+  | string;
+
+export interface ModeleDocumentVariableDto {
+  tag: string;
+  description: string;
+}
+
+export interface ModeleDocumentDto {
+  id: string;
+  uuid: string;
+  titre: string;
+  code?: string;
+  type_document: TypeDocumentOfficiel;
+  description?: string;
+  contenu: string;
+  variables_disponibles: ModeleDocumentVariableDto[];
+  signature_nom?: string;
+  signature_titre?: string;
+  statut: 'actif' | 'inactif';
+  is_system: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateModeleDocumentDto {
+  titre: string;
+  code?: string;
+  type_document: TypeDocumentOfficiel;
+  description?: string;
+  contenu: string;
+  variables_disponibles?: ModeleDocumentVariableDto[];
+  signature_nom?: string;
+  signature_titre?: string;
+  statut?: 'actif' | 'inactif';
+}
+
+export interface UpdateModeleDocumentDto extends Partial<CreateModeleDocumentDto> {}
+
+export interface DocumentGenereDto {
+  id: string;
+  uuid: string;
+  reference_document: string;
+  reference?: string;
+  titre: string;
+  type_document: TypeDocumentOfficiel;
+  contenu: string;
+  metadonnees?: Record<string, any>;
+  date_generation: string;
+  statut: 'valide' | 'annule' | string;
+  modele_document_id?: string;
+  modele_titre?: string;
+  catechumene_id?: string;
+  catechumene?: {
+    id: string;
+    matricule: string;
+    nom: string;
+    prenom: string;
+    nom_complet: string;
+  };
+  annee_catechese_id?: string;
+  annee_libelle?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GenererDocumentDto {
+  modele_document_id: string;
+  catechumene_id: string;
+  annee_catechese_id?: string;
+  date_generation?: string;
+  variables_personnalisees?: Record<string, string>;
+}
+
+export interface GenererDocumentsMasseDto {
+  modele_document_id: string;
+  classe_id?: string;
+  niveau_id?: string;
+  annee_catechese_id?: string;
+  catechumenes_ids?: string[];
+}
+
+// =====================================================================
+// 10. MODULE IMPRESSIONS & FICHES OFFICIELLES
+// =====================================================================
+
+export interface ImpressionEntetePayloadDto {
+  diocese: string;
+  doyenne: string;
+  paroisse: string;
+  nom_paroisse: string;
+  nom: string;
+  ville: string;
+  commune: string;
+  adresse: string;
+  telephone: string;
+  email: string;
+  site_web?: string;
+  cure_nom: string;
+  coordination: string;
+  coordination_nom: string;
+  logo_url?: string | null;
+  annee: string;
+  annee_libelle: string;
+  date_edition: string;
+}
+
+export interface ImpressionFiltresDto {
+  annee_catechese_id?: string;
+  section_id?: string;
+  niveau_id?: string;
+  classe_id?: string;
+  catechumene_id?: string;
+  sacrament?: string;
+  debut_cours?: string;
+  jour?: string;
+  nombre_seances?: number;
+}
+
+export interface ImpressionDocumentMetaDto {
+  titre: string;
+  classe_nom?: string;
+  section_nom?: string;
+  niveau_nom?: string;
+  annee_pastorale?: string;
+  jour?: string;
+  sacrament?: string;
+  animateurs?: string[];
+  dates_seances?: string[];
+  total_eleves?: number;
+  total_candidats?: number;
+  total_fiches?: number;
+  effectif_garcons?: number;
+  effectif_filles?: number;
+  total_baptises?: number;
+  total_non_baptises?: number;
+}
+
+export interface ImpressionResponseDto<T = any> {
+  status: 'success' | 'error';
+  entete: ImpressionEntetePayloadDto;
+  document: ImpressionDocumentMetaDto;
+  colonnes?: string[] | Record<string, any>;
+  lignes?: T[];
+  fiches?: T[];
+}
+
+// =================================================================
+// MODULE SACREMENTS (Baptême, 1ère Communion, Confirmation)
+// =================================================================
+
+export type SacrementCode = 'BAPTEME' | 'PREMIERE_COMMUNION' | 'CONFIRMATION';
+export type SacrementStatut = 'non_recu' | 'preparation' | 'valide';
+
+export interface SacrementDto {
+  id: string;
+  uuid: string;
+  code: SacrementCode;
+  nom: string;
+  libelle: string;
+  description?: string;
+  ordre: number;
+  statut: string;
+}
+
+export interface ParcoursSacrementItemDto {
+  id?: string;
+  sacrement_id: string;
+  sacrement_code: SacrementCode;
+  sacrement_nom: string;
+  ordre: number;
+  statut: SacrementStatut;
+  date_sacrement?: string | null;
+  lieu?: string | null;
+  paroisse_nom?: string | null;
+  celebrant?: string | null;
+  numero_registre?: string | null;
+  num_carnet?: string | null;
+  observations?: string | null;
+  annee_pastorale?: string | null;
+  validated_at?: string | null;
+  validated_by?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface CatechumeneSacrementListRowDto {
+  id: string;
+  uuid: string;
+  matricule: string;
+  code_catechumene: string;
+  nom: string;
+  prenom: string;
+  prenoms: string;
+  nom_complet: string;
+  sexe: 'M' | 'F' | string;
+  date_naissance?: string;
+  telephone?: string;
+  statut: string;
+  section_id?: string;
+  section_nom?: string;
+  niveau_id?: string;
+  niveau_nom?: string;
+  classe_id?: string;
+  classe_nom?: string;
+  annee_pastorale?: string;
+  sacrements_status: {
+    bapteme: SacrementStatut;
+    premiere_communion: SacrementStatut;
+    confirmation: SacrementStatut;
+  };
+  est_baptise: boolean;
+  date_bapteme?: string;
+  date_premiere_communion?: string;
+  date_confirmation?: string;
+  created_at?: string;
+}
+
+export interface StoreCatechumenSacrementDto {
+  sacrement_id: string; // UUID ou Code (ex: BAPTEME)
+  annee_catechese_id?: string;
+  statut?: 'preparation' | 'valide';
+  date_sacrement?: string | null;
+  lieu?: string | null;
+  paroisse_nom?: string | null;
+  celebrant?: string | null;
+  numero_registre?: string | null;
+  num_carnet?: string | null;
+  observations?: string | null;
+}
+
+export interface UpdateCatechumenSacrementDto {
+  statut?: 'preparation' | 'valide';
+  date_sacrement?: string | null;
+  lieu?: string | null;
+  paroisse_nom?: string | null;
+  celebrant?: string | null;
+  numero_registre?: string | null;
+  num_carnet?: string | null;
+  observations?: string | null;
+}
+
+export interface SacrementFilterParams {
+  section_id?: string;
+  niveau_id?: string;
+  classe_id?: string;
+  sacrement_id?: string;
+  statut?: 'preparation' | 'valide';
+  annee_catechese_id?: string;
+  search?: string;
+  page?: number;
+  per_page?: number;
+}
+

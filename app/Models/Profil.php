@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Profil extends Model
 {
-    use HasAuditFields, HasFactory, HasUuid, SoftDeletes;
+    use Auditable, HasAuditFields, HasFactory, HasUuid, SoftDeletes;
 
     protected $table = 'profils';
 
@@ -30,6 +32,17 @@ class Profil extends Model
         'permissions' => 'array',
         'is_system'   => 'boolean',
     ];
+
+    /**
+     * Résolution robuste pour Route Model Binding (UUID ou ID numérique).
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return is_numeric($value)
+            ? $this->where('id', $value)->first()
+            : $this->where('uuid', $value)->first()
+            ?? parent::resolveRouteBinding($value, $field);
+    }
 
     /**
      * Utilisateurs possédant ce profil.
@@ -104,31 +117,39 @@ class Profil extends Model
 
         // Normalisation de l'action
         $column = match (strtolower($action)) {
-            'create'                 => 'can_create',
-            'read', 'view', 'show'   => 'can_read',
-            'update', 'edit', 'patch'=> 'can_update',
-            'delete', 'destroy'      => 'can_delete',
-            'restore'                => 'can_restore',
-            'force_delete', 'force'  => 'can_force_delete',
-            'manage'                 => 'can_read',
-            default                  => 'can_read',
+            'create', 'store', 'post'          => 'can_create',
+            'read', 'view', 'show', 'index', 'get' => 'can_read',
+            'update', 'edit', 'patch', 'put'   => 'can_update',
+            'delete', 'destroy'                => 'can_delete',
+            'restore'                          => 'can_restore',
+            'force_delete', 'force'            => 'can_force_delete',
+            'manage'                           => 'can_read',
+            default                            => 'can_read',
         };
 
-        // Recherche du menu ou sous-menu par référence
-        $menu = Menu::where('reference', $menuReference)
-            ->orWhere('path', '/' . ltrim($menuReference, '/'))
-            ->first();
+        // Recherche du menu ou sous-menu par référence exacte, préfixe main_ ou chemin
+        $cleanRef = strtolower(trim($menuReference));
+        $menus = Menu::where('reference', $cleanRef)
+            ->orWhere('reference', "main_{$cleanRef}")
+            ->orWhere('reference', 'like', "%{$cleanRef}%")
+            ->orWhere('path', '/' . ltrim($cleanRef, '/'))
+            ->get();
 
-        if (!$menu) {
+        if ($menus->isEmpty()) {
             return false;
         }
 
-        $pivot = $this->menuPermissions()->where('menu_id', $menu->id)->first();
-        if (!$pivot) {
-            return false;
-        }
+        $menuIds = $menus->pluck('id')->toArray();
 
-        return (bool) $pivot->{$column};
+        // Récupérer aussi les IDs des sous-menus si un menu parent a été trouvé
+        $subMenusIds = Menu::whereIn('parent_id', $menuIds)->pluck('id')->toArray();
+        $allTargetIds = array_unique(array_merge($menuIds, $subMenusIds));
+
+        // Vérifier si l'une des permissions associées accorde le droit requis
+        return $this->menuPermissions()
+            ->whereIn('menu_id', $allTargetIds)
+            ->where($column, true)
+            ->exists();
     }
 
     /**

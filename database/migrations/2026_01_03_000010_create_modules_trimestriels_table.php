@@ -24,6 +24,7 @@ return new class extends Migration
             $table->integer('numero_trimestre')->default(1);
             $table->date('date_debut')->nullable();
             $table->date('date_fin')->nullable();
+            $table->string('statut', 30)->default('en_cours');
             $table->timestamps();
             $table->softDeletes();
         });

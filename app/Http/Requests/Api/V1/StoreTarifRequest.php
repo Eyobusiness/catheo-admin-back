@@ -16,9 +16,13 @@ class StoreTarifRequest extends FormRequest
         return [
             'annee_catechese_id' => ['required', 'string', 'exists:annee_catecheses,uuid'],
             'niveau_id' => ['nullable', 'string', 'exists:niveaux,uuid'],
+            'niveau_ids' => ['nullable', 'array'],
+            'niveau_ids.*' => ['string', 'exists:niveaux,uuid'],
             'intitule' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
             'montant' => ['required', 'numeric', 'min:0'],
-            'type_tarif' => ['required', 'string', 'in:inscription,manuel,uniforme,examen,autre'],
+            'est_obligatoire' => ['nullable', 'boolean'],
+            'type_tarif' => ['required', 'string'],
         ];
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class Catechumene extends Authenticatable
 {
-    use HasApiTokens, HasAuditFields, HasFactory, HasUuid, Notifiable, SoftDeletes;
+    use Auditable, HasApiTokens, HasAuditFields, HasFactory, HasUuid, Notifiable, SoftDeletes;
 
     protected $table = 'catechumenes';
 
@@ -23,7 +25,7 @@ class Catechumene extends Authenticatable
         'paroisse_configuration_id',
         'ceb_id',
         'user_id',
-        'code_catechumene',
+        'matricule',
         'nom',
         'prenoms',
         'sexe',
@@ -56,7 +58,6 @@ class Catechumene extends Authenticatable
         'paroisse_premiere_communion',
         'date_confirmation',
         'paroisse_confirmation',
-        'ministre_confirmation',
         'statut',
         'dernier_login_at',
     ];
@@ -78,7 +79,7 @@ class Catechumene extends Authenticatable
 
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function ceb(): BelongsTo
@@ -99,6 +100,29 @@ class Catechumene extends Authenticatable
     public function parrainsMarraines(): HasMany
     {
         return $this->hasMany(ParrainMarraine::class, 'catechumene_id');
+    }
+
+    public function parcoursSacrements(): HasMany
+    {
+        return $this->hasMany(CatechumenSacrement::class, 'catechumene_id');
+    }
+
+    public function sacrements(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Sacrement::class, 'catechumen_sacrements', 'catechumene_id', 'sacrement_id')
+            ->withPivot([
+                'id',
+                'uuid',
+                'statut',
+                'date_sacrement',
+                'lieu',
+                'numero_registre',
+                'num_carnet',
+                'observations',
+                'validated_at',
+                'validated_by',
+            ])
+            ->withTimestamps();
     }
 
     public function getNomCompletAttribute(): string
@@ -156,4 +180,10 @@ class Catechumene extends Authenticatable
             ],
         ];
     }
+
+    public function hasPermission(string $permission): bool
+    {
+        return true;
+    }
 }
+

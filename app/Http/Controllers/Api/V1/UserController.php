@@ -20,7 +20,7 @@ class UserController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()?->paroisse_configuration_id;
 
         $query = User::with(['paroisse', 'profil']);
 
@@ -28,21 +28,45 @@ class UserController extends Controller
             $query->where('paroisse_configuration_id', $paroisseId);
         }
 
-        if ($request->has('search')) {
-            $search = $request->search;
+        if ($request->filled('search')) {
+            $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('nom', 'like', "%{$search}%")
                   ->orWhere('prenoms', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('telephone', 'like', "%{$search}%");
             });
         }
 
-        $users = $query->paginate($request->get('per_page', 15));
+        if ($request->filled('statut') && strtolower($request->input('statut')) !== 'tous') {
+            $query->where('statut', strtolower($request->input('statut')));
+        }
+
+        if ($request->filled('profil_id')) {
+            $profilInput = $request->input('profil_id');
+            $profil = is_numeric($profilInput)
+                ? Profil::find($profilInput)
+                : Profil::where('uuid', $profilInput)->orWhere('code', $profilInput)->first();
+
+            if ($profil) {
+                $query->where('profil_id', $profil->id);
+            }
+        }
+
+        $perPage = (int) $request->get('per_page', 15);
+        $paginator = $query->latest()->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
-            'data' => $users,
+            'meta'   => [
+                'current_page'   => $paginator->currentPage(),
+                'per_page'       => $paginator->perPage(),
+                'total_elements' => $paginator->total(),
+                'total_pages'    => $paginator->lastPage(),
+                'has_next'       => $paginator->hasMorePages(),
+            ],
+            'data'   => UserResource::collection($paginator->items()),
         ]);
     }
 
@@ -51,27 +75,39 @@ class UserController extends Controller
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()?->paroisse_configuration_id;
         $validated = $request->validated();
 
-        $profil = Profil::where('uuid', $validated['profil_id'])->firstOrFail();
+        $profilInput = $validated['profil_id'];
+        $profil = is_numeric($profilInput)
+            ? Profil::find($profilInput)
+            : Profil::where('uuid', $profilInput)->orWhere('code', $profilInput)->first();
 
-        $name = $validated['name'] ?? trim(($validated['nom'] ?? '') . ' ' . ($validated['prenoms'] ?? ''));
-        if (empty($name)) {
-            $name = 'Utilisateur';
+        if (!$profil) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Le profil sélectionné est introuvable.',
+            ], 422);
         }
 
         $nom = $validated['nom'] ?? $validated['name'] ?? 'Utilisateur';
         $prenoms = $validated['prenoms'] ?? '';
+        $name = $validated['name'] ?? trim("{$nom} {$prenoms}");
+        if (empty($name)) {
+            $name = 'Utilisateur';
+        }
+
+        $statut = strtolower($validated['statut'] ?? (isset($validated['is_active']) && !$validated['is_active'] ? 'inactif' : 'actif'));
 
         $user = User::create([
             'paroisse_configuration_id' => $paroisseId,
             'profil_id'                 => $profil->id,
+            'user_type'                 => 'admin',
             'name'                      => $name,
             'email'                     => $validated['email'],
             'password'                  => Hash::make($validated['password']),
             'telephone'                 => $validated['telephone'] ?? null,
-            'statut'                    => $validated['statut'] ?? 'actif',
+            'statut'                    => $statut,
         ]);
 
         return response()->json([
@@ -86,7 +122,7 @@ class UserController extends Controller
      */
     public function show(Request $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
 
         return response()->json([
             'status' => 'success',
@@ -99,57 +135,86 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
         $validated = $request->validated();
 
-        if (isset($validated['profil_id'])) {
-            $profil = Profil::where('uuid', $validated['profil_id'])->firstOrFail();
-            $user->profil_id = $profil->id;
+        if (!empty($validated['profil_id'])) {
+            $profilInput = $validated['profil_id'];
+            $profil = is_numeric($profilInput)
+                ? Profil::find($profilInput)
+                : Profil::where('uuid', $profilInput)->orWhere('code', $profilInput)->first();
+
+            if ($profil) {
+                $user->profil_id = $profil->id;
+            }
         }
 
         if (!empty($validated['password'])) {
             $user->password = Hash::make($validated['password']);
         }
 
-        $name = $validated['name'] ?? null;
-        if (!$name && (isset($validated['nom']) || isset($validated['prenoms']))) {
-            $name = trim(($validated['nom'] ?? '') . ' ' . ($validated['prenoms'] ?? ''));
+        $nom = $validated['nom'] ?? null;
+        $prenoms = $validated['prenoms'] ?? null;
+
+        if (isset($validated['name'])) {
+            $user->name = $validated['name'];
+        } elseif ($nom !== null || $prenoms !== null) {
+            $currentNom = $nom !== null ? $nom : $user->nom;
+            $currentPrenoms = $prenoms !== null ? $prenoms : $user->prenoms;
+            $user->name = trim("{$currentNom} {$currentPrenoms}");
         }
 
-        if (!empty($name)) {
-            $user->name = $name;
+        if (isset($validated['email'])) {
+            $user->email = $validated['email'];
         }
-
-        $user->fill([
-            'email'     => $validated['email'] ?? $user->email,
-            'telephone' => array_key_exists('telephone', $validated) ? $validated['telephone'] : $user->telephone,
-            'statut'    => $validated['statut'] ?? $user->statut,
-        ]);
+        if (array_key_exists('telephone', $validated)) {
+            $user->telephone = $validated['telephone'];
+        }
+        if (isset($validated['statut'])) {
+            $user->statut = strtolower($validated['statut']);
+        } elseif (isset($validated['is_active'])) {
+            $user->statut = $validated['is_active'] ? 'actif' : 'inactif';
+        }
 
         $user->save();
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Utilisateur mis à jour avec succès.',
-            'data' => new UserResource($user->load(['paroisse', 'profil'])),
+            'data'    => new UserResource($user->load(['paroisse', 'profil'])),
         ]);
     }
 
     /**
-     * Modification du statut d'un utilisateur via FormRequest.
+     * Basculer / Modifier le statut d'un utilisateur.
      */
     public function updateStatus(UpdateUserStatusRequest $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
+
+        if ($request->user() && $user->id === $request->user()->id) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Vous ne pouvez pas désactiver votre propre compte connecté.',
+            ], 422);
+        }
+
         $validated = $request->validated();
 
-        $user->statut = $validated['statut'] ?? ($validated['is_active'] ? 'actif' : 'inactif');
+        if (isset($validated['statut'])) {
+            $user->statut = strtolower($validated['statut']);
+        } elseif (isset($validated['is_active'])) {
+            $user->statut = $validated['is_active'] ? 'actif' : 'inactif';
+        } else {
+            $user->statut = ($user->statut === 'actif') ? 'inactif' : 'actif';
+        }
+
         $user->save();
 
         return response()->json([
-            'status' => 'success',
-            'message' => 'Statut utilisateur mis à jour.',
-            'data' => new UserResource($user->load(['paroisse', 'profil'])),
+            'status'  => 'success',
+            'message' => "Le statut de l'utilisateur '{$user->name}' est désormais " . ucfirst($user->statut) . ".",
+            'data'    => new UserResource($user->load(['paroisse', 'profil'])),
         ]);
     }
 
@@ -158,26 +223,33 @@ class UserController extends Controller
      */
     public function destroy(Request $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
 
-        if ($user->id === $request->user()->id) {
+        if ($request->user() && $user->id === $request->user()->id) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Vous ne pouvez pas supprimer votre propre compte.',
+                'status'  => 'error',
+                'message' => 'Vous ne pouvez pas supprimer votre propre compte connecté.',
             ], 422);
+        }
+
+        if ($user->profil && $user->profil->code === 'SUPER_ADMIN') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Le compte Super Administrateur ne peut pas être supprimé.',
+            ], 403);
         }
 
         $user->delete();
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Utilisateur supprimé avec succès.',
         ]);
     }
 
-    private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
+    private function authorizeTenant(?int $userParoisseId, ?int $targetParoisseId): void
     {
-        if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
+        if ($userParoisseId && $targetParoisseId && $userParoisseId !== $targetParoisseId) {
             abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
         }
     }

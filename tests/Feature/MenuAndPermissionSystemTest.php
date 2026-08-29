@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Menu;
-use App\Models\ParoisseConfiguration;
+use App\Models\CatecheseConfiguration;
 use App\Models\Profil;
 use App\Models\User;
 use Database\Seeders\InitialSetupSeeder;
@@ -217,7 +217,7 @@ class MenuAndPermissionSystemTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('classes', [
-            'code' => 'INIT1-SJ',
+            'nom' => 'Initiation 1 - Groupe Saint-Joseph',
         ]);
 
         $this->assertDatabaseHas('seances', [

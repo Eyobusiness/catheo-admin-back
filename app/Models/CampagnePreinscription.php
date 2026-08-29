@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CampagnePreinscription extends Model
 {
-    use HasAuditFields, HasFactory, HasUuid, SoftDeletes;
+    use Auditable, HasAuditFields, HasFactory, HasUuid, SoftDeletes;
 
     protected $table = 'campagnes_preinscriptions';
 
@@ -37,12 +39,11 @@ class CampagnePreinscription extends Model
     protected $appends = [
         'public_url',
         'qr_code_url',
-        'est_ouverte',
     ];
 
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function anneeCatechese(): BelongsTo

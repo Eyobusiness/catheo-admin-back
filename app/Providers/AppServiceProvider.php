@@ -48,5 +48,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(120)->by($request->user()?->id ?: $request->ip());
         });
+
+        // Observers pour les notifications d'activité automatiques
+        \App\Models\Paiement::observe(\App\Observers\PaiementObserver::class);
+        \App\Models\Note::observe(\App\Observers\NoteObserver::class);
+        \App\Models\Seance::observe(\App\Observers\SeanceObserver::class);
+        \App\Models\Preinscription::observe(\App\Observers\PreinscriptionObserver::class);
+        \App\Models\Catechumene::observe(\App\Observers\CatechumeneObserver::class);
+        \App\Models\Classe::observe(\App\Observers\ClasseObserver::class);
     }
 }

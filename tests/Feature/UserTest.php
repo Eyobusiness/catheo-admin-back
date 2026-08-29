@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\ParoisseConfiguration;
+use App\Models\CatecheseConfiguration;
 use App\Models\Profil;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,7 +15,7 @@ class UserTest extends TestCase
     protected User $superAdmin;
     protected User $paroisseAdmin;
     protected Profil $profilCatechiste;
-    protected ParoisseConfiguration $paroisse;
+    protected CatecheseConfiguration $paroisse;
     protected string $superAdminToken;
     protected string $paroisseAdminToken;
 
@@ -31,7 +31,7 @@ class UserTest extends TestCase
         $this->paroisseAdminToken = $this->paroisseAdmin->createToken('ParoisseAdminDevice')->plainTextToken;
 
         $this->profilCatechiste = Profil::where('code', 'CATECHISTE')->first();
-        $this->paroisse = ParoisseConfiguration::where('code_paroisse', 'PAR-STPAUL-01')->first();
+        $this->paroisse = CatecheseConfiguration::where('code_paroisse', 'PAR-STPAUL-01')->first();
     }
 
     /**

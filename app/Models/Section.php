@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Section extends Model
 {
-    use HasAuditFields, HasFactory, HasUuid, SoftDeletes;
+    use Auditable, HasAuditFields, HasFactory, HasUuid, SoftDeletes;
 
     protected $table = 'sections';
 
@@ -28,7 +30,7 @@ class Section extends Model
 
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function niveaux(): HasMany

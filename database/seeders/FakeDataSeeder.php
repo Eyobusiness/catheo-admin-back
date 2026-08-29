@@ -17,9 +17,7 @@ use App\Models\Catechumene;
 use App\Models\Ceb;
 use App\Models\Classe;
 use App\Models\DecisionFinAnnee;
-use App\Models\DonCotisation;
 use App\Models\Evaluation;
-use App\Models\Groupe;
 use App\Models\InscriptionAnnuelle;
 use App\Models\LignePaiement;
 use App\Models\ModuleTrimestriel;
@@ -30,7 +28,7 @@ use App\Models\Note;
 use App\Models\NotificationLog;
 use App\Models\OperationPaiement;
 use App\Models\Paiement;
-use App\Models\ParoisseConfiguration;
+use App\Models\CatecheseConfiguration;
 use App\Models\ParrainMarraine;
 use App\Models\Preinscription;
 use App\Models\Presence;
@@ -39,9 +37,8 @@ use App\Models\Sauvegarde;
 use App\Models\Seance;
 use App\Models\Section;
 use App\Models\Tarif;
-use App\Models\TypeActivite;
 use App\Models\User;
-use App\Models\VersementCure;
+use App\Models\Versement;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -50,7 +47,7 @@ class FakeDataSeeder extends Seeder
 {
     public function run(): void
     {
-        $paroisse = ParoisseConfiguration::first();
+        $paroisse = CatecheseConfiguration::first();
         if (!$paroisse) {
             $this->command->error('Exécutez InitialSetupSeeder au préalable.');
             return;
@@ -66,10 +63,9 @@ class FakeDataSeeder extends Seeder
         $secJeunes = $sections->get('SEC-JEUNES');
         $secAdultes = $sections->get('SEC-ADULTES');
 
-        $niveaux = Niveau::where('paroisse_configuration_id', $paroisse->id)->get()->keyBy('code');
-        $niv1 = $niveaux->get('INIT_1');
-        $niv2 = $niveaux->get('INIT_2');
-        $nivConf = $niveaux->get('CONF_1');
+        $niv1 = Niveau::where('paroisse_configuration_id', $paroisse->id)->where('nom', 'like', '%1ère Année%')->first();
+        $niv2 = Niveau::where('paroisse_configuration_id', $paroisse->id)->where('nom', 'like', '%2ème Année%')->first();
+        $nivConf = Niveau::where('paroisse_configuration_id', $paroisse->id)->where('nom', 'like', '%Confirmation%')->first();
 
         $this->command->info('Génération du jeu de données complet et cohérent pour Catheo...');
 
@@ -80,7 +76,6 @@ class FakeDataSeeder extends Seeder
                 'couleur_principale' => '#1B3A4B',
                 'couleur_secondaire' => '#E07A5F',
                 'police_caracteres'  => 'Inter',
-                'logo_url'           => '/storage/paroisse/logo.png',
                 'entete_document'    => 'ARCHIDIOCESE D\'ABIDJAN - PAROISSE SAINT-PAUL DU PLATEAU',
                 'pied_page_document' => 'Secrétariat Paroissial - Tél : +225 27 20 21 22 23 - email : contact@saintpaul-plateau.ci',
             ]
@@ -96,7 +91,6 @@ class FakeDataSeeder extends Seeder
             Ceb::firstOrCreate(
                 ['paroisse_configuration_id' => $paroisse->id, 'nom' => $c['nom']],
                 [
-                    'code'        => $c['code'],
                     'responsable' => $c['responsable'],
                     'telephone'   => $c['tel'],
                     'adresse'     => $c['secteur'],
@@ -112,9 +106,8 @@ class FakeDataSeeder extends Seeder
         ];
         foreach ($mouvementsData as $m) {
             Mouvement::firstOrCreate(
-                ['paroisse_configuration_id' => $paroisse->id, 'code' => $m['code']],
+                ['paroisse_configuration_id' => $paroisse->id, 'nom' => $m['nom']],
                 [
-                    'nom'         => $m['nom'],
                     'description' => $m['description'],
                 ]
             );
@@ -122,39 +115,28 @@ class FakeDataSeeder extends Seeder
 
         // ── 3. CLASSES ────────────────────────────────────────────
         $classesConfig = [
-            ['nom' => 'Initiation 1 - Groupe Saint-Joseph',   'code' => 'INIT1-SJ',  'niveau' => $niv1,    'salle' => 'Salle Jean-Paul II', 'cap' => 35],
-            ['nom' => 'Initiation 1 - Groupe Sainte-Thérèse', 'code' => 'INIT1-ST',  'niveau' => $niv1,    'salle' => 'Salle Sainte-Anne',  'cap' => 30],
-            ['nom' => 'Initiation 2 - Groupe Saint-Pierre',   'code' => 'INIT2-SP',  'niveau' => $niv2,    'salle' => 'Salle Saint-Marc',   'cap' => 35],
-            ['nom' => 'Confirmation 1 - Groupe Saint-Paul',   'code' => 'CONF1-SP',  'niveau' => $nivConf, 'salle' => 'Grande Salle',       'cap' => 40],
+            ['nom' => 'Initiation 1 - Groupe Saint-Joseph',   'niveau' => $niv1,    'cap' => 35],
+            ['nom' => 'Initiation 1 - Groupe Sainte-Thérèse', 'niveau' => $niv1,    'cap' => 30],
+            ['nom' => 'Initiation 2 - Groupe Saint-Pierre',   'niveau' => $niv2,    'cap' => 35],
+            ['nom' => 'Confirmation 1 - Groupe Saint-Paul',   'niveau' => $nivConf, 'cap' => 40],
         ];
 
         $classes = collect();
         foreach ($classesConfig as $cfg) {
             if ($cfg['niveau']) {
                 $cls = Classe::firstOrCreate(
-                    ['paroisse_configuration_id' => $paroisse->id, 'code' => $cfg['code']],
                     [
-                        'annee_catechese_id'  => $annee->id,
-                        'niveau_id'           => $cfg['niveau']->id,
-                        'nom'                 => $cfg['nom'],
-                        'lieu_rassemblement'  => $cfg['salle'],
-                        'capacite_max'        => $cfg['cap'],
-                        'jour_rencontre'      => 'Dimanche',
-                        'heure_debut'         => '09:00:00',
-                        'heure_fin'           => '11:00:00',
-                        'statut'              => 'active',
+                        'paroisse_configuration_id' => $paroisse->id,
+                        'annee_catechese_id'        => $annee->id,
+                        'niveau_id'                 => $cfg['niveau']->id,
+                        'nom'                       => $cfg['nom'],
+                    ],
+                    [
+                        'capacite_max'              => $cfg['cap'],
+                        'statut'                    => 'active',
                     ]
                 );
                 $classes->push($cls);
-
-                // Création d'un sous-groupe pastoral dans la classe
-                Groupe::firstOrCreate(
-                    ['paroisse_configuration_id' => $paroisse->id, 'nom' => 'Équipe ' . $cfg['nom']],
-                    [
-                        'classe_id'   => $cls->id,
-                        'description' => 'Sous-groupe d\'activités pastorales et récollections',
-                    ]
-                );
             }
         }
 
@@ -184,15 +166,14 @@ class FakeDataSeeder extends Seeder
             );
 
             $anim = Animateur::firstOrCreate(
-                ['matricule' => sprintf('ANM-%03d', $idx + 1)],
+                ['telephone' => $d[3]],
                 [
                     'paroisse_configuration_id' => $paroisse->id,
-                    'user_id'                  => $userAnim->id,
                     'nom'                      => $d[0],
                     'prenoms'                  => $d[1],
                     'sexe'                     => $d[2],
-                    'telephone'                => $d[3],
                     'email'                    => $d[5],
+                    'password'                 => Hash::make('12345678'),
                     'profession'               => $d[4],
                     'statut'                   => 'actif',
                 ]
@@ -307,7 +288,7 @@ class FakeDataSeeder extends Seeder
             );
 
             $cat = Catechumene::firstOrCreate(
-                ['code_catechumene' => $mat],
+                ['matricule' => $mat],
                 [
                     'paroisse_configuration_id' => $paroisse->id,
                     'user_id'                  => $userParent->id,
@@ -565,8 +546,8 @@ class FakeDataSeeder extends Seeder
             );
         }
 
-        // Versement au Curé
-        VersementCure::firstOrCreate(
+        // Versement de caisse
+        Versement::firstOrCreate(
             ['reference' => 'VERS-2026-001'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
@@ -576,19 +557,6 @@ class FakeDataSeeder extends Seeder
                 'mode_remise'               => 'especes',
                 'effectue_par'              => 'Charles BADO (Comptable)',
                 'statut'                    => 'valide',
-            ]
-        );
-
-        // Don / Cotisation
-        DonCotisation::firstOrCreate(
-            ['paroisse_configuration_id' => $paroisse->id, 'donateur_nom' => 'Famille KOUASSI'],
-            [
-                'annee_catechese_id' => $annee->id,
-                'type_don'           => 'don_especes',
-                'montant'            => 100000.00,
-                'description'        => 'Don pour l\'achat de manuels aux enfants défavorisés',
-                'date_reception'     => '2026-10-01',
-                'numero_recu'        => 'DON-2026-001',
             ]
         );
 

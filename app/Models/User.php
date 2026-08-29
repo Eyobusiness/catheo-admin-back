@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasAuditFields, HasFactory, HasUuid, Notifiable, SoftDeletes;
+    use Auditable, HasApiTokens, HasAuditFields, HasFactory, HasUuid, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -23,8 +25,6 @@ class User extends Authenticatable
         'user_type', // admin, animateur, parent
         'username',  // code_catechumene ou matricule
         'name',
-        'nom',
-        'prenoms',
         'email',
         'telephone',
         'password',
@@ -46,9 +46,25 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Résolution robuste pour Route Model Binding (UUID ou ID numérique).
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return is_numeric($value)
+            ? $this->where('id', $value)->first()
+            : $this->where('uuid', $value)->first()
+            ?? parent::resolveRouteBinding($value, $field);
+    }
+
+    public function catechese(): BelongsTo
+    {
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
+    }
+
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->catechese();
     }
 
     public function profil(): BelongsTo

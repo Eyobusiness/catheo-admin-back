@@ -65,18 +65,21 @@ return new class extends Migration
                     ->constrained('paroisse_configurations')
                     ->cascadeOnDelete();
                 $table->foreignId('annee_catechese_id')
+                    ->nullable()
                     ->constrained('annee_catecheses')
-                    ->cascadeOnDelete();
-                $table->string('titre', 150);
-                $table->string('type', 150);
+                    ->nullOnDelete();
+                $table->string('titre', 255);
+                $table->string('type', 100);
                 $table->date('date');
-                $table->time('heure_debut')->nullable();
-                $table->time('heure_fin')->nullable();
-                $table->string('lieu', 150)->nullable();
-                $table->enum('cible_type', ['TOUS', 'ANIMATEURS', 'SECTION', 'NIVEAU', 'CLASSE', 'CEB', 'MOUVEMENT'])->default('TOUS');
-                $table->unsignedBigInteger('cible_id')->nullable();
+                $table->string('heure_debut', 20)->nullable();
+                $table->string('heure_fin', 20)->nullable();
+                $table->string('lieu', 255)->nullable();
+                $table->string('cible_type', 50)->default('Tous');
+                $table->text('cible_id')->nullable();
+                $table->json('cible_ids')->nullable();
+                $table->string('cible_nom', 255)->nullable();
                 $table->text('description')->nullable();
-                $table->enum('statut', ['Planifié', 'Réalisé', 'Annulé'])->default('Planifié');
+                $table->string('statut', 50)->default('Planifié');
                 $table->timestamps();
                 $table->softDeletes();
                 $table->uuid('created_by')->nullable();

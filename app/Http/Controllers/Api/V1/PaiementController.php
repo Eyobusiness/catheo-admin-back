@@ -10,6 +10,7 @@ use App\Models\CaisseParoissiale;
 use App\Models\Catechumene;
 use App\Models\InscriptionAnnuelle;
 use App\Models\LignePaiement;
+use App\Models\OperationPaiement;
 use App\Models\Paiement;
 use App\Models\Tarif;
 use Illuminate\Http\JsonResponse;
@@ -85,12 +86,8 @@ class PaiementController extends Controller
                 $montantTotal += $ligne['montant'] * $qte;
             }
 
-            // 2. Générer le numéro de reçu unique (ex: REC-2026-0001)
-            $prefixAnnee = date('Y', strtotime($validated['date_paiement']));
-            $countRecu = Paiement::where('paroisse_configuration_id', $paroisseId)
-                ->where('numero_recu', 'like', "REC-{$prefixAnnee}-%")
-                ->count();
-            $numeroRecu = sprintf("REC-%s-%04d", $prefixAnnee, $countRecu + 1);
+            // 2. Générer le numéro de reçu officiel unique (ex: REC26-124002-0001)
+            $numeroRecu = app(\App\Services\ReceiptNumberGeneratorService::class)->generate($paroisseId, $validated['date_paiement']);
 
             // 3. Créer le paiement
             $paiementObj = Paiement::create([
@@ -130,6 +127,18 @@ class PaiementController extends Controller
             // 5. Mettre à jour l'inscription si paiement des frais d'inscription
             if ($inscription) {
                 $inscription->update(['frais_inscription_payes' => true]);
+            }
+
+            // Mettre à jour l'opération de paiement en attente associée
+            if ($catechumene) {
+                OperationPaiement::where('paroisse_configuration_id', $paroisseId)
+                    ->where('catechumene_id', $catechumene->id)
+                    ->where('annee_catechese_id', $annee->id)
+                    ->where('statut', 'en_attente')
+                    ->update([
+                        'statut' => 'paye',
+                        'montant_paye' => $montantTotal,
+                    ]);
             }
 
             // 6. Écriture automatique dans la caisse paroissiale

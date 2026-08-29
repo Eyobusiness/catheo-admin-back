@@ -14,9 +14,9 @@ class AnneeCatecheseResource extends JsonResource
             'libelle' => $this->libelle,
             'date_debut' => $this->date_debut?->toDateString(),
             'date_fin' => $this->date_fin?->toDateString(),
-            'est_active' => $this->est_active,
             'statut' => $this->statut,
             'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }

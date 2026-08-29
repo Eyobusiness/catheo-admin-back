@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Note extends Model
 {
-    use HasAuditFields, HasFactory, HasUuid, SoftDeletes;
+    use Auditable, HasAuditFields, HasFactory, HasUuid, SoftDeletes;
 
     protected $table = 'notes';
 
@@ -30,7 +32,7 @@ class Note extends Model
 
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function evaluation(): BelongsTo

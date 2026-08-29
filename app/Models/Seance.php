@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Seance extends Model
 {
-    use HasFactory, HasUuid, SoftDeletes;
+    use Auditable, HasFactory, HasUuid, SoftDeletes;
 
     protected $table = 'seances';
 
@@ -20,13 +22,12 @@ class Seance extends Model
         'paroisse_configuration_id',
         'annee_catechese_id',
         'classe_id',
-        'module_trimestriel_id',
         'titre',
         'date_seance',
         'heure_debut',
         'heure_fin',
-        'statut',
         'description',
+        'statut',
     ];
 
     protected $casts = [
@@ -35,7 +36,7 @@ class Seance extends Model
 
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function anneeCatechese(): BelongsTo
@@ -46,11 +47,6 @@ class Seance extends Model
     public function classe(): BelongsTo
     {
         return $this->belongsTo(Classe::class, 'classe_id');
-    }
-
-    public function moduleTrimestriel(): BelongsTo
-    {
-        return $this->belongsTo(ModuleTrimestriel::class, 'module_trimestriel_id');
     }
 
     public function presences(): HasMany

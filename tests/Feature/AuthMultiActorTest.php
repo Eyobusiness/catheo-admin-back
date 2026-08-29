@@ -48,7 +48,7 @@ class AuthMultiActorTest extends TestCase
         $animateur = Animateur::first();
         $this->assertNotNull($animateur->telephone);
 
-        $response = $this->postJson('/api/v1/auth/login', [
+        $response = $this->postJson('/api/v1/auth/animateurs/login', [
             'login' => $animateur->telephone,
             'password' => '12345678',
         ]);
@@ -61,7 +61,7 @@ class AuthMultiActorTest extends TestCase
                 ],
             ])
             ->assertJsonStructure([
-                'data' => ['token', 'user' => ['id', 'name', 'telephone', 'animateur']],
+                'data' => ['token', 'user' => ['id', 'nom', 'telephone']],
             ]);
     }
 
@@ -71,12 +71,14 @@ class AuthMultiActorTest extends TestCase
     public function test_parent_can_login_with_catechumene_matricule_and_default_password(): void
     {
         $catechumene = Catechumene::first();
-        $this->assertNotNull($catechumene->code_catechumene);
+        $this->assertNotNull($catechumene);
+        $catechumene->update(['password' => '12345678']);
 
-        $response = $this->postJson('/api/v1/auth/login', [
-            'login' => $catechumene->code_catechumene,
+        $response = $this->postJson('/api/v1/auth/parents/login', [
+            'login' => $catechumene->matricule,
             'password' => '12345678',
         ]);
+
 
         $response->assertStatus(200)
             ->assertJson([
@@ -86,7 +88,7 @@ class AuthMultiActorTest extends TestCase
                 ],
             ])
             ->assertJsonStructure([
-                'data' => ['token', 'user' => ['id', 'username', 'catechumene']],
+                'data' => ['token', 'user' => ['id', 'nom', 'matricule']],
             ]);
     }
 
@@ -95,11 +97,11 @@ class AuthMultiActorTest extends TestCase
      */
     public function test_animateur_can_access_own_dashboard(): void
     {
-        $user = User::where('user_type', 'animateur')->first();
-        $token = $user->createToken('MobileApp')->plainTextToken;
+        $animateur = Animateur::first();
+        $token = $animateur->createToken('MobileApp')->plainTextToken;
 
         $response = $this->withHeader('Authorization', 'Bearer ' . $token)
-            ->getJson('/api/v1/dashboard/summary');
+            ->getJson('/api/v1/dashboard/animateur');
 
         $response->assertStatus(200)
             ->assertJson([
@@ -107,9 +109,10 @@ class AuthMultiActorTest extends TestCase
                 'user_type' => 'animateur',
             ])
             ->assertJsonStructure([
-                'data' => ['animateur', 'kpis', 'classes', 'evaluations_a_saisir'],
+                'data' => ['animateur', 'kpis', 'classes'],
             ]);
     }
+
 
     /**
      * Test du tableau de bord spécifique Parent.

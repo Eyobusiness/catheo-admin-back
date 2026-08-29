@@ -20,8 +20,8 @@ return new class extends Migration
             $table->date('periode_debut')->nullable();
             $table->date('periode_fin')->nullable();
             $table->boolean('est_obligatoire')->default(true);
-            $table->enum('type_tarif', ['inscription', 'manuel', 'uniforme', 'examen', 'retraite', 'autre'])->default('inscription');
-            $table->enum('statut', ['actif', 'inactif'])->default('actif');
+            $table->string('type_tarif')->default('inscription');
+            $table->string('statut')->default('actif');
             $table->timestamps();
             $table->softDeletes();
 

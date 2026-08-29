@@ -10,11 +10,15 @@ class PresenceResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->uuid,
+            'id'              => $this->uuid,
+            'catechumene_id'  => $this->catechumene?->uuid,
             'statut_presence' => $this->statut_presence,
-            'motif_absence' => $this->motif_absence,
-            'catechumene' => new CatechumeneResource($this->whenLoaded('catechumene')),
-            'created_at' => $this->created_at?->toIso8601String(),
+            'est_present'     => in_array($this->statut_presence, ['present', 'retard']),
+            'remarque'        => $this->remarque ?? $this->motif_absence,
+            'motif_absence'   => $this->motif_absence ?? $this->remarque,
+            'catechumene'     => new CatechumeneResource($this->whenLoaded('catechumene')),
+            'created_at'      => $this->created_at?->toIso8601String(),
+            'updated_at'      => $this->updated_at?->toIso8601String(),
         ];
     }
 }

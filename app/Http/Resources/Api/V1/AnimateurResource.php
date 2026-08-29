@@ -10,17 +10,19 @@ class AnimateurResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->uuid,
-            'matricule' => $this->matricule,
-            'nom' => $this->nom,
-            'prenoms' => $this->prenoms,
-            'sexe' => $this->sexe,
-            'telephone' => $this->telephone,
-            'email' => $this->email,
-            'profession' => $this->profession,
-            'statut' => $this->statut,
-            'user' => new UserResource($this->whenLoaded('user')),
-            'created_at' => $this->created_at?->toIso8601String(),
+            'id'                 => $this->uuid,
+            'nom'                => $this->nom,
+            'prenoms'            => $this->prenoms,
+            'nom_complet'        => $this->nom_complet,
+            'sexe'               => $this->sexe,
+            'telephone'          => $this->telephone,
+            'email'              => $this->email,
+            'profession'         => $this->profession,
+            'statut'             => $this->statut ?? 'actif',
+            'dernier_login_at'   => $this->dernier_login_at?->toIso8601String(),
+            'affectations_count' => $this->affectations()->count(),
+            'created_at'         => $this->created_at?->toIso8601String(),
+            'updated_at'         => $this->updated_at?->toIso8601String(),
         ];
     }
 }

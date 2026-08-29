@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\ParoisseConfiguration;
+use App\Models\CatecheseConfiguration;
 use App\Models\Profil;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;

@@ -6,11 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\CalendrierResource;
 use App\Models\AnneeCatechese;
 use App\Models\Calendrier;
-use App\Models\Ceb;
-use App\Models\Classe;
-use App\Models\Mouvement;
-use App\Models\Niveau;
-use App\Models\Section;
+use App\Models\CatecheseConfiguration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,31 +17,31 @@ class CalendrierController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
 
         $query = Calendrier::with('anneeCatechese')
             ->where('paroisse_configuration_id', $paroisseId);
 
         if ($request->filled('annee_catechese_id')) {
-            $anneeId = AnneeCatechese::where('uuid', $request->annee_catechese_id)->value('id');
+            $anneeId = AnneeCatechese::where('uuid', $request->annee_catechese_id)
+                ->orWhere('id', $request->annee_catechese_id)
+                ->value('id');
             if ($anneeId) {
                 $query->where('annee_catechese_id', $anneeId);
             }
-        } else {
-            $activeAnneeId = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
-                ->where('est_active', true)
-                ->value('id');
-            if ($activeAnneeId) {
-                $query->where('annee_catechese_id', $activeAnneeId);
-            }
         }
 
-        if ($request->filled('cible_type') && strtoupper($request->cible_type) !== 'TOUS') {
-            $query->where('cible_type', strtoupper($request->cible_type));
+        if ($request->filled('cible_type') && !in_array(strtolower($request->cible_type), ['', 'tous_publics', 'all'])) {
+            $targetCible = $request->cible_type;
+            $query->where(function ($q) use ($targetCible) {
+                $q->where('cible_type', $targetCible)
+                  ->orWhereRaw('LOWER(cible_type) = ?', [strtolower($targetCible)]);
+            });
         }
 
         if ($request->filled('statut') && strtolower($request->statut) !== 'tous') {
-            $query->where('statut', ucfirst(strtolower($request->statut)));
+            $statut = $this->normalizeStatut($request->statut);
+            $query->where('statut', $statut);
         }
 
         if ($request->filled('type')) {
@@ -56,17 +52,21 @@ class CalendrierController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('titre', 'like', "%{$search}%")
+                  ->orWhere('type', 'like', "%{$search}%")
                   ->orWhere('lieu', 'like', "%{$search}%")
+                  ->orWhere('cible_nom', 'like', "%{$search}%")
                   ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
-        if ($request->filled('date_debut')) {
-            $query->whereDate('date', '>=', $request->date_debut);
+        $startDate = $request->input('start_date') ?? $request->input('date_debut');
+        if ($startDate) {
+            $query->whereDate('date', '>=', $startDate);
         }
 
-        if ($request->filled('date_fin')) {
-            $query->whereDate('date', '<=', $request->date_fin);
+        $endDate = $request->input('end_date') ?? $request->input('date_fin');
+        if ($endDate) {
+            $query->whereDate('date', '<=', $endDate);
         }
 
         $activites = $query->orderBy('date', 'asc')->orderBy('heure_debut', 'asc')->get();
@@ -85,36 +85,51 @@ class CalendrierController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+
+        $data = $request->all();
+
+        // Normalisation année
+        $anneeInput = $data['annee_catechese_id'] ?? $data['annee_id'] ?? ($data['annee_catechese']['id'] ?? null);
+        if ($anneeInput) {
+            $data['annee_catechese_id'] = $anneeInput;
+        }
+
+        $request->merge($data);
 
         $validated = $request->validate([
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-            'titre'              => ['required', 'string', 'max:150'],
-            'type'               => ['required', 'string', 'max:150'],
+            'annee_catechese_id' => ['nullable', 'string'],
+            'titre'              => ['required', 'string', 'min:3', 'max:255'],
+            'type'               => ['required', 'string', 'max:100'],
             'date'               => ['required', 'date'],
-            'heure_debut'        => ['nullable', 'date_format:H:i'],
-            'heure_fin'          => ['nullable', 'date_format:H:i'],
-            'lieu'               => ['nullable', 'string', 'max:150'],
-            'cible_type'         => ['nullable', 'string', 'in:TOUS,ANIMATEURS,SECTION,NIVEAU,CLASSE,CEB,MOUVEMENT,tous,animateurs,section,niveau,classe,ceb,mouvement'],
+            'heure_debut'        => ['nullable', 'string'],
+            'heure_fin'          => ['nullable', 'string'],
+            'lieu'               => ['nullable', 'string', 'max:255'],
+            'cible_type'         => ['required', 'string', 'max:50'],
             'cible_id'           => ['nullable', 'string'],
+            'cible_ids'          => ['nullable', 'array'],
+            'cible_nom'          => ['nullable', 'string', 'max:255'],
             'description'        => ['nullable', 'string'],
-            'statut'             => ['nullable', 'string', 'in:Planifié,Réalisé,Annulé,planifie,realise,annule,Planifie,Realise,Annule'],
+            'statut'             => ['nullable', 'string'],
         ]);
 
         if (!empty($validated['annee_catechese_id'])) {
-            $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->firstOrFail();
-            $anneeId = $annee->id;
+            $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])
+                ->orWhere('id', $validated['annee_catechese_id'])
+                ->first();
+            $anneeId = $annee?->id;
         } else {
-            $anneeId = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
-                ->where('est_active', true)
-                ->value('id') ?? AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->latest()->value('id');
+            $annee = AnneeCatechese::getAnneeCourante($paroisseId) ?? AnneeCatechese::first();
+            $anneeId = $annee?->id;
         }
 
-        $cibleType = strtoupper($validated['cible_type'] ?? 'TOUS');
-        $cibleId = null;
+        $cibleIds = $validated['cible_ids'] ?? [];
+        $cibleId = $validated['cible_id'] ?? null;
 
-        if (!empty($validated['cible_id']) && !in_array($cibleType, ['TOUS', 'ANIMATEURS'])) {
-            $cibleId = $this->resolveCibleInternalId($cibleType, $validated['cible_id'], $paroisseId);
+        if (empty($cibleId) && !empty($cibleIds)) {
+            $cibleId = implode(',', $cibleIds);
+        } elseif (!empty($cibleId) && empty($cibleIds)) {
+            $cibleIds = array_map('trim', explode(',', $cibleId));
         }
 
         $calendrier = Calendrier::create([
@@ -126,17 +141,19 @@ class CalendrierController extends Controller
             'heure_debut'               => $validated['heure_debut'] ?? null,
             'heure_fin'                 => $validated['heure_fin'] ?? null,
             'lieu'                      => $validated['lieu'] ?? null,
-            'cible_type'                => $cibleType,
+            'cible_type'                => $validated['cible_type'],
             'cible_id'                  => $cibleId,
+            'cible_ids'                 => $cibleIds,
+            'cible_nom'                 => $validated['cible_nom'] ?? null,
             'description'               => $validated['description'] ?? null,
-            'statut'                    => ucfirst(strtolower($validated['statut'] ?? 'Planifié')),
+            'statut'                    => $this->normalizeStatut($validated['statut'] ?? 'Planifié'),
         ]);
 
         $calendrier->load('anneeCatechese');
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Événement du calendrier créé avec succès.',
+            'message' => 'Événement enregistré avec succès.',
             'data'    => new CalendrierResource($calendrier),
         ], 201);
     }
@@ -144,37 +161,49 @@ class CalendrierController extends Controller
     /**
      * Détails d'un événement au calendrier.
      */
-    public function show(Request $request, Calendrier $calendrier): JsonResponse
+    public function show(Request $request, mixed $calendrier): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $calendrier->paroisse_configuration_id);
+        $model = $this->resolveCalendrier($calendrier);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
-        $calendrier->load('anneeCatechese');
+        $model->load('anneeCatechese');
 
         return response()->json([
             'status' => 'success',
-            'data'   => new CalendrierResource($calendrier),
+            'data'   => new CalendrierResource($model),
         ]);
     }
 
     /**
      * Mise à jour d'un événement au calendrier.
      */
-    public function update(Request $request, Calendrier $calendrier): JsonResponse
+    public function update(Request $request, mixed $calendrier): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $calendrier->paroisse_configuration_id);
+        $model = $this->resolveCalendrier($calendrier);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+
+        $data = $request->all();
+
+        if (isset($data['annee_catechese']['id']) && !isset($data['annee_catechese_id'])) {
+            $data['annee_catechese_id'] = $data['annee_catechese']['id'];
+        }
+
+        $request->merge($data);
 
         $validated = $request->validate([
-            'annee_catechese_id' => ['sometimes', 'nullable', 'string', 'exists:annee_catecheses,uuid'],
-            'titre'              => ['sometimes', 'required', 'string', 'max:150'],
-            'type'               => ['sometimes', 'required', 'string', 'max:150'],
+            'annee_catechese_id' => ['sometimes', 'nullable', 'string'],
+            'titre'              => ['sometimes', 'required', 'string', 'min:3', 'max:255'],
+            'type'               => ['sometimes', 'required', 'string', 'max:100'],
             'date'               => ['sometimes', 'required', 'date'],
-            'heure_debut'        => ['nullable', 'date_format:H:i'],
-            'heure_fin'          => ['nullable', 'date_format:H:i'],
-            'lieu'               => ['nullable', 'string', 'max:150'],
-            'cible_type'         => ['nullable', 'string', 'in:TOUS,ANIMATEURS,SECTION,NIVEAU,CLASSE,CEB,MOUVEMENT,tous,animateurs,section,niveau,classe,ceb,mouvement'],
+            'heure_debut'        => ['nullable', 'string'],
+            'heure_fin'          => ['nullable', 'string'],
+            'lieu'               => ['nullable', 'string', 'max:255'],
+            'cible_type'         => ['nullable', 'string', 'max:50'],
             'cible_id'           => ['nullable', 'string'],
+            'cible_ids'          => ['nullable', 'array'],
+            'cible_nom'          => ['nullable', 'string', 'max:255'],
             'description'        => ['nullable', 'string'],
-            'statut'             => ['nullable', 'string', 'in:Planifié,Réalisé,Annulé,planifie,realise,annule,Planifie,Realise,Annule'],
+            'statut'             => ['nullable', 'string'],
         ]);
 
         $updateData = [];
@@ -201,66 +230,82 @@ class CalendrierController extends Controller
             $updateData['description'] = $validated['description'];
         }
         if (isset($validated['statut'])) {
-            $updateData['statut'] = ucfirst(strtolower($validated['statut']));
+            $updateData['statut'] = $this->normalizeStatut($validated['statut']);
         }
-
-        if (!empty($validated['annee_catechese_id'])) {
-            $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->firstOrFail();
-            $updateData['annee_catechese_id'] = $annee->id;
-        }
-
         if (isset($validated['cible_type'])) {
-            $cibleType = strtoupper($validated['cible_type']);
-            $updateData['cible_type'] = $cibleType;
-
-            if (in_array($cibleType, ['TOUS', 'ANIMATEURS'])) {
-                $updateData['cible_id'] = null;
-            } elseif (array_key_exists('cible_id', $validated)) {
-                $updateData['cible_id'] = $validated['cible_id'] ? $this->resolveCibleInternalId($cibleType, $validated['cible_id'], $calendrier->paroisse_configuration_id) : null;
+            $updateData['cible_type'] = $validated['cible_type'];
+        }
+        if (array_key_exists('cible_ids', $validated)) {
+            $updateData['cible_ids'] = $validated['cible_ids'];
+            if (!empty($validated['cible_ids'])) {
+                $updateData['cible_id'] = implode(',', $validated['cible_ids']);
             }
-        } elseif (array_key_exists('cible_id', $validated)) {
-            $updateData['cible_id'] = $validated['cible_id'] ? $this->resolveCibleInternalId($calendrier->cible_type, $validated['cible_id'], $calendrier->paroisse_configuration_id) : null;
+        }
+        if (array_key_exists('cible_id', $validated)) {
+            $updateData['cible_id'] = $validated['cible_id'];
+            if (!empty($validated['cible_id']) && !isset($updateData['cible_ids'])) {
+                $updateData['cible_ids'] = array_map('trim', explode(',', $validated['cible_id']));
+            }
+        }
+        if (array_key_exists('cible_nom', $validated)) {
+            $updateData['cible_nom'] = $validated['cible_nom'];
         }
 
-        $calendrier->update($updateData);
-        $calendrier->load('anneeCatechese');
+        if (array_key_exists('annee_catechese_id', $validated)) {
+            if (!empty($validated['annee_catechese_id'])) {
+                $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])
+                    ->orWhere('id', $validated['annee_catechese_id'])
+                    ->first();
+                $updateData['annee_catechese_id'] = $annee?->id;
+            }
+        }
+
+        $model->update($updateData);
+        $model->refresh();
+        $model->load('anneeCatechese');
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Événement du calendrier mis à jour avec succès.',
-            'data'    => new CalendrierResource($calendrier),
+            'data'    => new CalendrierResource($model),
         ]);
     }
 
     /**
      * Modification du statut d'une activité du calendrier.
      */
-    public function updateStatus(Request $request, Calendrier $calendrier): JsonResponse
+    public function updateStatus(Request $request, mixed $calendrier): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $calendrier->paroisse_configuration_id);
+        $model = $this->resolveCalendrier($calendrier);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
-        $validated = $request->validate([
-            'statut' => ['required', 'string', 'in:Planifié,Réalisé,Annulé,planifie,realise,annule,Planifie,Realise,Annule'],
-        ]);
+        $statusInput = $request->input('statut') ?? $request->input('status');
 
-        $calendrier->update(['statut' => ucfirst(strtolower($validated['statut']))]);
-        $calendrier->load('anneeCatechese');
+        $validated = validator(['statut' => $statusInput], [
+            'statut' => ['required', 'string'],
+        ])->validate();
+
+        $statut = $this->normalizeStatut($validated['statut']);
+        $model->update(['statut' => $statut]);
+        $model->refresh();
+        $model->load('anneeCatechese');
 
         return response()->json([
             'status'  => 'success',
-            'message' => "Le statut de l'activité est désormais {$calendrier->statut}.",
-            'data'    => new CalendrierResource($calendrier),
+            'message' => "Le statut de l'activité est désormais {$model->statut}.",
+            'data'    => new CalendrierResource($model),
         ]);
     }
 
     /**
      * Suppression d'une activité du calendrier.
      */
-    public function destroy(Request $request, Calendrier $calendrier): JsonResponse
+    public function destroy(Request $request, mixed $calendrier): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $calendrier->paroisse_configuration_id);
+        $model = $this->resolveCalendrier($calendrier);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
 
-        $calendrier->delete();
+        $model->delete();
 
         return response()->json([
             'status'  => 'success',
@@ -268,15 +313,29 @@ class CalendrierController extends Controller
         ]);
     }
 
-    private function resolveCibleInternalId(string $cibleType, string $cibleUuid, int $paroisseId): ?int
+    /**
+     * Résout l'instance du modèle depuis un objet injecté, un UUID ou un ID numérique.
+     */
+    private function resolveCalendrier(mixed $calendrier): Calendrier
     {
-        return match ($cibleType) {
-            'SECTION'   => Section::where('uuid', $cibleUuid)->value('id'),
-            'NIVEAU'    => Niveau::where('uuid', $cibleUuid)->value('id'),
-            'CLASSE'    => Classe::where('uuid', $cibleUuid)->value('id'),
-            'CEB'       => Ceb::where('uuid', $cibleUuid)->value('id'),
-            'MOUVEMENT' => Mouvement::where('uuid', $cibleUuid)->value('id'),
-            default     => null,
+        if ($calendrier instanceof Calendrier && $calendrier->exists) {
+            return $calendrier;
+        }
+
+        $identifier = is_object($calendrier) ? ($calendrier->uuid ?? $calendrier->id ?? null) : $calendrier;
+
+        return Calendrier::where('uuid', $identifier)
+            ->orWhere('id', $identifier)
+            ->firstOrFail();
+    }
+
+    private function normalizeStatut(string $statut): string
+    {
+        $cleaned = mb_strtolower(trim($statut), 'UTF-8');
+        return match ($cleaned) {
+            'realise', 'réalisé', 'effectue', 'effectué' => 'Réalisé',
+            'annule', 'annulé'                           => 'Annulé',
+            default                                      => 'Planifié',
         };
     }
 
@@ -287,3 +346,4 @@ class CalendrierController extends Controller
         }
     }
 }
+

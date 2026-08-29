@@ -12,7 +12,6 @@ class CebResource extends JsonResource
         return [
             'id'                        => $this->uuid,
             'nom'                       => $this->nom,
-            'code'                      => $this->code,
             'responsable'               => $this->responsable,
             'telephone'                 => $this->telephone,
             'adresse'                   => $this->adresse,

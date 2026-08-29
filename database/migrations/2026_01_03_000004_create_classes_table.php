@@ -24,12 +24,7 @@ return new class extends Migration
                 ->constrained('niveaux')
                 ->cascadeOnDelete();
             $table->string('nom');
-            $table->string('code')->nullable();
             $table->integer('capacite_max')->default(30);
-            $table->string('lieu_rassemblement')->nullable();
-            $table->string('jour_rencontre')->nullable();
-            $table->time('heure_debut')->nullable();
-            $table->time('heure_fin')->nullable();
             $table->string('statut')->default('active');
             $table->timestamps();
             $table->softDeletes();

@@ -14,12 +14,23 @@ class StoreProfilRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:50', 'unique:profils,code'],
-            'nom' => ['nullable', 'string', 'max:255'],
-            'libelle' => ['nullable', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'statut' => ['nullable', 'string', 'in:actif,inactif'],
-            'permissions' => ['nullable', 'array'],
+            'code'             => ['required', 'string', 'max:50', 'unique:profils,code'],
+            'nom'              => ['nullable', 'string', 'max:255'],
+            'libelle'          => ['nullable', 'string', 'max:255'],
+            'description'      => ['nullable', 'string'],
+            'statut'           => ['nullable', 'string', 'in:actif,inactif,Actif,Inactif'],
+            'permissions'      => ['nullable', 'array'],
+            'menu_permissions' => ['nullable', 'array'],
+            'menus'            => ['nullable', 'array'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'code.required' => 'Le code du profil est obligatoire.',
+            'code.unique'   => 'Ce code de profil est déjà utilisé.',
+            'nom.max'       => 'Le nom ne peut pas dépasser 255 caractères.',
         ];
     }
 }

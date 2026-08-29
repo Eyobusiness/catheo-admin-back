@@ -15,7 +15,7 @@ class MouvementController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Mouvement::withCount('inscriptionsAnnuelles')
             ->where('paroisse_configuration_id', $paroisseId);
@@ -50,7 +50,7 @@ class MouvementController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'nom'         => ['required', 'string', 'max:150'],

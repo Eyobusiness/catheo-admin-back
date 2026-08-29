@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('catechumene_id')->constrained('catechumenes')->cascadeOnDelete();
             $table->enum('statut_presence', ['present', 'absent', 'retard', 'excuse'])->default('present');
             $table->string('motif_absence')->nullable();
+            $table->string('remarque')->nullable();
             $table->timestamps();
             $table->softDeletes();
 

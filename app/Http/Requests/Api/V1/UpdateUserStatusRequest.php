@@ -15,7 +15,7 @@ class UpdateUserStatusRequest extends FormRequest
     {
         return [
             'is_active' => ['nullable', 'boolean'],
-            'statut' => ['nullable', 'string'],
+            'statut'    => ['nullable', 'string', 'in:actif,inactif,Actif,Inactif'],
         ];
     }
 }

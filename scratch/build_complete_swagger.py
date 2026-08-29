@@ -373,113 +373,173 @@ schemas = {
         }
     },
 
-    # 3. Configuration Paroissiale & Apparence
-    "ParoisseConfigurationDto": {
+    # 3. Configuration de la Catéchèse & Apparence
+    "CatecheseConfigurationDto": {
         "type": "object",
-        "required": ["id", "nom_paroisse", "diocese"],
+        "required": ["id", "nom_paroisse", "code_paroisse", "statut"],
         "properties": {
             "id": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d10"},
-            "nom_paroisse": {"type": "string", "example": "Paroisse Saint-Paul du Plateau"},
+            "nom_paroisse": {"type": "string", "example": "Paroisse Cathédrale Saint-Paul"},
+            "code_paroisse": {"type": "string", "example": "PAR-STPAUL-01"},
             "diocese": {"type": "string", "example": "Archidiocèse d'Abidjan"},
-            "adresse": {"type": "string", "example": "Avenue Jean-Paul II, Plateau, Abidjan"},
-            "telephone_1": {"type": "string", "example": "+225 2720212223"},
-            "telephone_2": {"type": "string", "example": "+225 0708091011"},
+            "doyenne": {"type": "string", "example": "Doyenne Monseigneur Laurent Yapi"},
+            "ville": {"type": "string", "example": "Abidjan"},
+            "commune": {"type": "string", "example": "Plateau"},
+            "telephone": {"type": "string", "example": "+225 2720212223"},
             "email": {"type": "string", "format": "email", "example": "contact@saintpaul-plateau.ci"},
-            "devise_paroisse": {"type": "string", "example": "Un Seul Cœur, Une Seule Âme"},
-            "annee_fondation": {"type": "string", "example": "1960"},
-            "nom_cure": {"type": "string", "example": "Père Jean-Baptiste AKRE"},
-            "logo_url": {"type": "string", "example": "/storage/paroisse/logo.png"},
-            "cachet_signature_url": {"type": "string", "example": "/storage/paroisse/cachet.png"},
-            "entete_documents": {"type": "string", "example": "ARCHIDIOCESE D'ABIDJAN - PAROISSE SAINT-PAUL DU PLATEAU"}
+            "site_web": {"type": "string", "example": "https://saintpaul-plateau.ci"},
+            "adresse": {"type": "string", "example": "Avenue Jean-Paul II, Plateau, Abidjan"},
+            "logo_paroisse": {"type": "string", "nullable": True, "example": "catechese/logos/paroisse/stpaul.png"},
+            "logo_paroisse_url": {"type": "string", "nullable": True, "example": "http://127.0.0.1:8000/storage/catechese/logos/paroisse/stpaul.png"},
+            "logo_catechese": {"type": "string", "nullable": True, "example": "catechese/logos/catechese/catechese.png"},
+            "logo_catechese_url": {"type": "string", "nullable": True, "example": "http://127.0.0.1:8000/storage/catechese/logos/catechese/catechese.png"},
+            "cure_nom": {"type": "string", "example": "Père Jean-Baptiste AKRE"},
+            "coordination_nom": {"type": "string", "example": "Coordination Pastorale de la Catéchèse"},
+            "statut": {"type": "string", "enum": ["actif", "inactif", "suspendu"], "example": "actif"},
+            "created_at": {"type": "string", "format": "date-time", "example": "2026-08-24T18:00:00Z"}
         },
         "example": {
             "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d10",
-            "nom_paroisse": "Paroisse Saint-Paul du Plateau",
+            "nom_paroisse": "Paroisse Cathédrale Saint-Paul",
+            "code_paroisse": "PAR-STPAUL-01",
             "diocese": "Archidiocèse d'Abidjan",
-            "adresse": "Avenue Jean-Paul II, Plateau, Abidjan",
-            "telephone_1": "+225 2720212223",
+            "doyenne": "Doyenne Monseigneur Laurent Yapi",
+            "ville": "Abidjan",
+            "commune": "Plateau",
+            "telephone": "+225 2720212223",
             "email": "contact@saintpaul-plateau.ci",
-            "nom_cure": "Père Jean-Baptiste AKRE",
-            "entete_documents": "ARCHIDIOCESE D'ABIDJAN - PAROISSE SAINT-PAUL DU PLATEAU"
+            "site_web": "https://saintpaul-plateau.ci",
+            "adresse": "Avenue Jean-Paul II, Plateau, Abidjan",
+            "logo_paroisse_url": "http://127.0.0.1:8000/storage/catechese/logos/paroisse/stpaul.png",
+            "logo_catechese_url": "http://127.0.0.1:8000/storage/catechese/logos/catechese/catechese.png",
+            "cure_nom": "Père Jean-Baptiste AKRE",
+            "coordination_nom": "Coordination Pastorale de la Catéchèse",
+            "statut": "actif",
+            "created_at": "2026-08-24T18:00:00Z"
         }
     },
-    "UpdateParoisseConfigurationDto": {
+    "UpdateCatecheseConfigurationDto": {
         "type": "object",
         "properties": {
-            "nom_paroisse": {"type": "string", "example": "Paroisse Saint-Paul du Plateau"},
+            "nom_paroisse": {"type": "string", "example": "Paroisse Cathédrale Saint-Paul"},
             "diocese": {"type": "string", "example": "Archidiocèse d'Abidjan"},
+            "doyenne": {"type": "string", "example": "Doyenne Monseigneur Laurent Yapi"},
+            "ville": {"type": "string", "example": "Abidjan"},
+            "commune": {"type": "string", "example": "Plateau"},
+            "telephone": {"type": "string", "example": "+225 2720212223"},
+            "email": {"type": "string", "format": "email", "example": "contact@saintpaul-plateau.ci"},
+            "site_web": {"type": "string", "example": "https://saintpaul-plateau.ci"},
             "adresse": {"type": "string", "example": "Avenue Jean-Paul II, Plateau, Abidjan"},
-            "telephone_1": {"type": "string", "example": "+225 2720212223"},
-            "telephone_2": {"type": "string", "example": "+225 0708091011"},
-            "email": {"type": "string", "format": "email", "example": "secretariat@saintpaul-plateau.ci"},
-            "devise_paroisse": {"type": "string", "example": "Ensemble vers le Christ"},
-            "nom_cure": {"type": "string", "example": "Père Jean-Baptiste AKRE"}
+            "cure_nom": {"type": "string", "example": "Père Jean-Baptiste AKRE"},
+            "coordination_nom": {"type": "string", "example": "Coordination Pastorale de la Catéchèse"},
+            "statut": {"type": "string", "enum": ["actif", "inactif", "suspendu"], "example": "actif"},
+            "logo_paroisse": {"type": "string", "format": "binary", "description": "Fichier image du logo de la paroisse"},
+            "logo_catechese": {"type": "string", "format": "binary", "description": "Fichier image du logo de la catéchèse"}
         },
         "example": {
-            "nom_paroisse": "Paroisse Saint-Paul du Plateau",
+            "nom_paroisse": "Paroisse Cathédrale Saint-Paul",
             "diocese": "Archidiocèse d'Abidjan",
-            "adresse": "Avenue Jean-Paul II, Plateau, Abidjan",
-            "telephone_1": "+225 2720212223",
-            "email": "secretariat@saintpaul-plateau.ci"
+            "telephone": "+225 2720212223",
+            "email": "contact@saintpaul-plateau.ci",
+            "cure_nom": "Père Jean-Baptiste AKRE"
         }
     },
-    "ResponsableParoisseDto": {
+    "ParoisseConfigurationDto": {
+        "$ref": "#/components/schemas/CatecheseConfigurationDto"
+    },
+    "UpdateParoisseConfigurationDto": {
+        "$ref": "#/components/schemas/UpdateCatecheseConfigurationDto"
+    },
+    "ResponsableCatecheseDto": {
         "type": "object",
-        "required": ["id", "nom_complet", "titre_fonction"],
+        "required": ["id", "nom_prenoms", "fonction", "statut"],
         "properties": {
             "id": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d11"},
-            "titre_fonction": {"type": "string", "example": "Curé de la Paroisse"},
-            "nom_complet": {"type": "string", "example": "Père Jean-Baptiste AKRE"},
+            "nom_prenoms": {"type": "string", "example": "Père Jean-Baptiste AKRE"},
+            "fonction": {"type": "string", "example": "Curé de la Paroisse"},
             "telephone": {"type": "string", "example": "+225 0701020304"},
-            "email": {"type": "string", "format": "email", "example": "cure@saintpaul-plateau.ci"},
-            "ordre_affichage": {"type": "integer", "example": 1},
-            "est_actif": {"type": "boolean", "example": True}
+            "statut": {"type": "string", "enum": ["actif", "inactif"], "example": "actif"},
+            "created_at": {"type": "string", "format": "date-time", "example": "2026-08-25T00:00:00Z"},
+            "updated_at": {"type": "string", "format": "date-time", "example": "2026-08-25T00:00:00Z"},
+            "created_by": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d01"},
+            "updated_by": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d01"}
         },
         "example": {
             "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d11",
-            "titre_fonction": "Curé de la Paroisse",
-            "nom_complet": "Père Jean-Baptiste AKRE",
+            "nom_prenoms": "Père Jean-Baptiste AKRE",
+            "fonction": "Curé de la Paroisse",
             "telephone": "+225 0701020304",
-            "email": "cure@saintpaul-plateau.ci",
-            "ordre_affichage": 1,
-            "est_actif": True
+            "statut": "actif"
         }
     },
-    "CreateResponsableParoisseDto": {
+    "CreateResponsableCatecheseDto": {
         "type": "object",
-        "required": ["nom_complet", "titre_fonction"],
+        "required": ["nom_prenoms", "fonction"],
         "properties": {
-            "titre_fonction": {"type": "string", "example": "Vicaire Paroissial"},
-            "nom_complet": {"type": "string", "example": "Père Marc KOFFI"},
+            "nom_prenoms": {"type": "string", "example": "Père Marc KOFFI"},
+            "fonction": {"type": "string", "example": "Vicaire Paroissial"},
             "telephone": {"type": "string", "example": "+225 0702030405"},
-            "email": {"type": "string", "format": "email", "example": "vicaire@saintpaul-plateau.ci"},
-            "ordre_affichage": {"type": "integer", "example": 2},
-            "est_actif": {"type": "boolean", "example": True}
+            "statut": {"type": "string", "enum": ["actif", "inactif"], "example": "actif"}
         },
         "example": {
-            "titre_fonction": "Vicaire Paroissial",
-            "nom_complet": "Père Marc KOFFI",
+            "nom_prenoms": "Père Marc KOFFI",
+            "fonction": "Vicaire Paroissial",
             "telephone": "+225 0702030405",
-            "email": "vicaire@saintpaul-plateau.ci",
-            "ordre_affichage": 2,
-            "est_actif": True
+            "statut": "actif"
+        }
+    },
+    "UpdateResponsableCatecheseDto": {
+        "type": "object",
+        "properties": {
+            "nom_prenoms": {"type": "string", "example": "Père Marc KOFFI"},
+            "fonction": {"type": "string", "example": "Vicaire Paroissial"},
+            "telephone": {"type": "string", "example": "+225 0702030405"},
+            "statut": {"type": "string", "enum": ["actif", "inactif"], "example": "actif"}
+        },
+        "example": {
+            "nom_prenoms": "Père Marc KOFFI",
+            "fonction": "Vicaire Paroissial",
+            "telephone": "+225 0702030405",
+            "statut": "actif"
         }
     },
     "ApparenceConfigurationDto": {
         "type": "object",
+        "required": ["id", "couleur_principale", "couleur_secondaire", "police_caracteres"],
         "properties": {
-            "couleur_primaire": {"type": "string", "example": "#1B3A4B"},
-            "couleur_secondaire": {"type": "string", "example": "#E07A5F"},
-            "couleur_accent": {"type": "string", "example": "#F2CC8F"},
-            "mode_sombre": {"type": "boolean", "example": False},
-            "style_interface": {"type": "string", "enum": ["moderne", "classique", "compact"], "example": "moderne"}
+            "id": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d12"},
+            "couleur_principale": {"type": "string", "example": "#4F46E5"},
+            "couleur_secondaire": {"type": "string", "example": "#D97706"},
+            "police_caracteres": {"type": "string", "enum": ["Inter", "Roboto", "Outfit", "Poppins", "Nunito", "DM Sans"], "example": "Inter"},
+            "entete_document": {"type": "string", "example": "PAROISSE CATHEDRALE SAINT-PAUL D'ABIDJAN"},
+            "pied_page_document": {"type": "string", "example": "Secretariat Paroissial - BP 123 Abidjan"},
+            "created_at": {"type": "string", "format": "date-time", "example": "2026-08-25T00:00:00Z"},
+            "updated_at": {"type": "string", "format": "date-time", "example": "2026-08-25T00:00:00Z"},
+            "created_by": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d01"},
+            "updated_by": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d01"}
         },
         "example": {
-            "couleur_primaire": "#1B3A4B",
-            "couleur_secondaire": "#E07A5F",
-            "couleur_accent": "#F2CC8F",
-            "mode_sombre": False,
-            "style_interface": "moderne"
+            "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d12",
+            "couleur_principale": "#4F46E5",
+            "couleur_secondaire": "#D97706",
+            "police_caracteres": "Inter",
+            "entete_document": "PAROISSE CATHEDRALE SAINT-PAUL D'ABIDJAN",
+            "pied_page_document": "Secretariat Paroissial - BP 123 Abidjan"
+        }
+    },
+    "UpdateApparenceConfigurationDto": {
+        "type": "object",
+        "properties": {
+            "couleur_principale": {"type": "string", "example": "#4F46E5"},
+            "couleur_secondaire": {"type": "string", "example": "#D97706"},
+            "police_caracteres": {"type": "string", "enum": ["Inter", "Roboto", "Outfit", "Poppins", "Nunito", "DM Sans"], "example": "Inter"},
+            "entete_document": {"type": "string", "example": "PAROISSE CATHEDRALE SAINT-PAUL D'ABIDJAN"},
+            "pied_page_document": {"type": "string", "example": "Secretariat Paroissial - BP 123 Abidjan"}
+        },
+        "example": {
+            "couleur_principale": "#4F46E5",
+            "couleur_secondaire": "#D97706",
+            "police_caracteres": "Inter"
         }
     },
     "SauvegardeDto": {
@@ -508,13 +568,13 @@ schemas = {
     # 4. Organisation Pastorale DTOs
     "AnneeCatecheseDto": {
         "type": "object",
-        "required": ["id", "libelle", "date_debut", "date_fin", "est_active"],
+        "required": ["id", "libelle", "date_debut", "date_fin", "statut"],
         "properties": {
             "id": {"type": "string", "format": "uuid", "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d20"},
             "libelle": {"type": "string", "example": "2026-2027"},
             "date_debut": {"type": "string", "format": "date", "example": "2026-09-15"},
             "date_fin": {"type": "string", "format": "date", "example": "2027-06-30"},
-            "est_active": {"type": "boolean", "example": True},
+            "statut": {"type": "string", "enum": ["preparation", "active", "cloturee"], "example": "active"},
             "description": {"type": "string", "example": "Année pastorale de la foi et du renouveau"},
             "total_inscrits": {"type": "integer", "example": 320},
             "created_at": {"type": "string", "format": "date-time", "example": "2026-08-01T10:00:00Z"}
@@ -524,7 +584,7 @@ schemas = {
             "libelle": "2026-2027",
             "date_debut": "2026-09-15",
             "date_fin": "2027-06-30",
-            "est_active": True,
+            "statut": "active",
             "total_inscrits": 320
         }
     },
@@ -535,14 +595,14 @@ schemas = {
             "libelle": {"type": "string", "example": "2026-2027"},
             "date_debut": {"type": "string", "format": "date", "example": "2026-09-15"},
             "date_fin": {"type": "string", "format": "date", "example": "2027-06-30"},
-            "est_active": {"type": "boolean", "example": False},
+            "statut": {"type": "string", "enum": ["preparation", "active", "cloturee"], "example": "preparation"},
             "description": {"type": "string", "example": "Année pastorale 2026-2027"}
         },
         "example": {
             "libelle": "2026-2027",
             "date_debut": "2026-09-15",
             "date_fin": "2027-06-30",
-            "est_active": False
+            "statut": "preparation"
         }
     },
     "SectionDto": {
@@ -1767,22 +1827,61 @@ paths = {
         }
     },
 
-    # 3. Configuration Paroissiale
-    "/paroisse-configuration": {
+    # 3. Configuration de la Catéchèse
+    "/catechese-configuration": {
         "get": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[GET] Obtenir les informations institutionnelles de la paroisse",
-            "description": "Renvoie la configuration globale de la paroisse (nom, diocèse, curé, coordonnées, logo).",
+            "summary": "[GET] Obtenir les informations institutionnelles de la catéchèse / paroisse",
+            "description": "Renvoie la configuration globale de la catéchèse (nom_paroisse, diocèse, curé, coordonnées, logo_paroisse, logo_catechese).",
             "security": [{"bearerAuth": []}],
-            "responses": std_responses("200", "Configuration paroissiale", "ParoisseConfigurationDto", has_400=False)
+            "responses": std_responses("200", "Configuration de la catéchèse", "CatecheseConfigurationDto", has_400=False)
         },
         "put": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[PUT] Mettre à jour les informations institutionnelles",
-            "description": "Met à jour les paramètres paroissiaux et coordonnées officielles.",
+            "summary": "[PUT] Mettre à jour les informations institutionnelles (JSON)",
+            "description": "Met à jour les paramètres de la catéchèse et coordonnées officielles.",
             "security": [{"bearerAuth": []}],
-            "requestBody": make_body("UpdateParoisseConfigurationDto"),
-            "responses": std_responses("200", "Configuration mise à jour", "ParoisseConfigurationDto")
+            "requestBody": make_body("UpdateCatecheseConfigurationDto"),
+            "responses": std_responses("200", "Configuration mise à jour", "CatecheseConfigurationDto")
+        },
+        "post": {
+            "tags": ["3. Configuration Paroissiale"],
+            "summary": "[POST] Mettre à jour les informations institutionnelles et logos (Multipart)",
+            "description": "Met à jour les paramètres et téléverse les logos (logo_paroisse et logo_catechese).",
+            "security": [{"bearerAuth": []}],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "multipart/form-data": {
+                        "schema": {
+                            "$ref": "#/components/schemas/UpdateCatecheseConfigurationDto"
+                        }
+                    },
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/UpdateCatecheseConfigurationDto"
+                        }
+                    }
+                }
+            },
+            "responses": std_responses("200", "Configuration mise à jour", "CatecheseConfigurationDto")
+        }
+    },
+    "/paroisse-configuration": {
+        "get": {
+            "tags": ["3. Configuration Paroissiale"],
+            "summary": "[GET] Obtenir les informations institutionnelles (Alias)",
+            "description": "Alias vers /catechese-configuration.",
+            "security": [{"bearerAuth": []}],
+            "responses": std_responses("200", "Configuration de la catéchèse", "CatecheseConfigurationDto", has_400=False)
+        },
+        "put": {
+            "tags": ["3. Configuration Paroissiale"],
+            "summary": "[PUT] Mettre à jour les informations institutionnelles (Alias)",
+            "description": "Alias vers /catechese-configuration.",
+            "security": [{"bearerAuth": []}],
+            "requestBody": make_body("UpdateCatecheseConfigurationDto"),
+            "responses": std_responses("200", "Configuration mise à jour", "CatecheseConfigurationDto")
         }
     },
     "/apparence-configuration": {
@@ -1811,45 +1910,45 @@ paths = {
             "responses": std_responses("200", "Thème réinitialisé", "ApparenceConfigurationDto", has_400=False)
         }
     },
-    "/responsables-paroisse": {
+    "/responsables-catechese": {
         "get": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[GET] Liste des prêtres et responsables paroissiaux",
-            "description": "Renvoie la liste ordonnée des responsables ecclésiaux de la paroisse.",
+            "summary": "[GET] Liste des responsables de la catéchèse",
+            "description": "Renvoie la liste ordonnée des responsables de la catéchèse du tenant connecté.",
             "security": [{"bearerAuth": []}],
-            "responses": std_responses("200", "Liste des responsables", "ResponsableParoisseDto", is_array=True, has_400=False)
+            "responses": std_responses("200", "Liste des responsables", "ResponsableCatecheseDto", is_array=True, has_400=False)
         },
         "post": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[POST] Ajouter un responsable paroissial",
-            "description": "Enregistre un nouveau responsable (Curé, Vicaire, Responsable Laïc).",
+            "summary": "[POST] Ajouter un responsable de catéchèse",
+            "description": "Enregistre un nouveau responsable de la catéchèse.",
             "security": [{"bearerAuth": []}],
-            "requestBody": make_body("CreateResponsableParoisseDto"),
-            "responses": std_responses("201", "Responsable créé", "ResponsableParoisseDto")
+            "requestBody": make_body("CreateResponsableCatecheseDto"),
+            "responses": std_responses("201", "Responsable créé", "ResponsableCatecheseDto")
         }
     },
-    "/responsables-paroisse/{id}": {
+    "/responsables-catechese/{id}": {
         "get": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[GET] Détails d'un responsable paroissial",
-            "description": "Renvoie les informations d'un responsable ecclésial par son UUID.",
+            "summary": "[GET] Détails d'un responsable de catéchèse",
+            "description": "Renvoie les informations d'un responsable par son UUID.",
             "security": [{"bearerAuth": []}],
             "parameters": make_param("id", "UUID du responsable"),
-            "responses": std_responses("200", "Détails du responsable", "ResponsableParoisseDto", has_400=False, has_404=True)
+            "responses": std_responses("200", "Détails du responsable", "ResponsableCatecheseDto", has_400=False, has_404=True)
         },
         "put": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[PUT] Modifier un responsable paroissial",
-            "description": "Met à jour le titre, nom ou coordonnées du responsable.",
+            "summary": "[PUT] Modifier un responsable de catéchèse",
+            "description": "Met à jour les informations du responsable de la catéchèse.",
             "security": [{"bearerAuth": []}],
             "parameters": make_param("id", "UUID du responsable"),
-            "requestBody": make_body("CreateResponsableParoisseDto"),
-            "responses": std_responses("200", "Responsable mis à jour", "ResponsableParoisseDto", has_404=True)
+            "requestBody": make_body("UpdateResponsableCatecheseDto"),
+            "responses": std_responses("200", "Responsable mis à jour", "ResponsableCatecheseDto", has_404=True)
         },
         "delete": {
             "tags": ["3. Configuration Paroissiale"],
-            "summary": "[DELETE] Supprimer un responsable",
-            "description": "Supprime un responsable paroissial.",
+            "summary": "[DELETE] Supprimer un responsable de catéchèse",
+            "description": "Supprime (soft delete) un responsable avec audit deleted_by.",
             "security": [{"bearerAuth": []}],
             "parameters": make_param("id", "UUID du responsable"),
             "responses": std_responses("200", "Responsable supprimé", "ApiResponse", example={"status": "success", "message": "Responsable supprimé avec succès."}, has_400=False, has_404=True)

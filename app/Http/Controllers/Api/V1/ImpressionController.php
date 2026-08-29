@@ -3,80 +3,111 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Api\V1\ParoisseConfigurationResource;
+use App\Http\Resources\Api\V1\CatecheseConfigurationResource;
 use App\Models\AnneeCatechese;
+use App\Models\BulletinTrimestriel;
+use App\Models\CatecheseConfiguration;
 use App\Models\Catechumene;
 use App\Models\Classe;
+use App\Models\DecisionFinAnnee;
+use App\Models\Evaluation;
 use App\Models\InscriptionAnnuelle;
 use App\Models\Niveau;
-use App\Models\ParoisseConfiguration;
+use App\Models\Note;
+use App\Models\OperationPaiement;
+use App\Models\Presence;
+use App\Models\Seance;
 use App\Models\Section;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Carbon\Carbon;
 
 class ImpressionController extends Controller
 {
+    private function resolveParoisse(Request $request): CatecheseConfiguration
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        return CatecheseConfiguration::find($paroisseId) ?? CatecheseConfiguration::firstOrFail();
+    }
+
     /**
      * Obtenir les métadonnées officielles de l'entête d'impression de la paroisse.
      */
     public function entete(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
+        $paroisse = $this->resolveParoisse($request);
+        $annee = AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
         return response()->json([
             'status' => 'success',
-            'data' => new ParoisseConfigurationResource($paroisse),
+            'data'   => new CatecheseConfigurationResource($paroisse),
+            'entete' => $this->getEntetePayload($paroisse, $annee),
         ]);
     }
 
     /**
-     * Générer la "Fiche de Notes" (modèle conforme au prototype).
+     * Générer la "Fiche de Notes".
      */
     public function ficheNotes(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-            'section_id' => ['nullable', 'string', 'exists:sections,uuid'],
-            'niveau_id' => ['nullable', 'string', 'exists:niveaux,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
         $classe = !empty($validated['classe_id'])
-            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->first()
+            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->orWhere('id', $validated['classe_id'])->first()
             : null;
 
-        $inscriptions = $this->getInscriptionsQuery($paroisseId, $annee?->id, $classe?->id, $validated)->get();
+        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)->get();
+        $animateurs = $classe ? $classe->affectations->map(fn($a) => trim($a->animateur->nom . ' ' . ($a->animateur->prenoms ?? $a->animateur->prenom ?? '')))->values()->toArray() : [];
 
-        $rows = $inscriptions->map(function ($ins, $index) {
+        // Récupérer les évaluations de la classe pour pré-remplir les notes si existantes
+        $evaluations = $classe ? Evaluation::where('classe_id', $classe->id)->when($annee, fn($q) => $q->where('annee_catechese_id', $annee->id))->get() : collect();
+        $evalIds = $evaluations->pluck('id');
+        $notesGrouped = Note::whereIn('evaluation_id', $evalIds)->get()->groupBy('catechumene_id');
+
+        $rows = $inscriptions->map(function ($ins, $index) use ($notesGrouped) {
+            $cat = $ins->catechumene;
+            $catNotes = $notesGrouped->get($cat->id, collect());
+            $moyenne = $catNotes->isNotEmpty() ? round($catNotes->avg('valeur_note'), 2) : null;
+            $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
+
             return [
-                'numero' => sprintf('%02d', $index + 1),
-                'code_catechumene' => $ins->catechumene->code_catechumene,
-                'nom_complet' => mb_strtoupper($ins->catechumene->nom) . ' ' . $ins->catechumene->prenoms,
-                'sexe' => $ins->catechumene->sexe,
-                'date_naissance' => $ins->catechumene->date_naissance?->toDateString(),
+                'numero'           => sprintf('%02d', $index + 1),
+                'matricule'        => $cat->matricule,
+                'code_catechumene' => $cat->matricule,
+                'nom'              => mb_strtoupper($cat->nom),
+                'prenom'           => $prenom,
+                'prenoms'          => $prenom,
+                'nom_complet'      => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'nomPrenoms'       => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'sexe'             => $cat->sexe,
+                'date_naissance'   => $cat->date_naissance ? (is_string($cat->date_naissance) ? substr($cat->date_naissance, 0, 10) : $cat->date_naissance->toDateString()) : null,
+                'note_1'           => $catNotes->get(0)?->valeur_note ?? '',
+                'note_2'           => $catNotes->get(1)?->valeur_note ?? '',
+                'note_3'           => $catNotes->get(2)?->valeur_note ?? '',
+                'moyenne'          => $moyenne ?? '',
+                'decision'         => $moyenne !== null ? ($moyenne >= 10 ? 'Admis' : 'Non admis') : '',
             ];
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => 'FICHE DE NOTES',
-                'classe_nom' => $classe?->nom ?? 'Toutes les classes',
-                'section_nom' => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
-                'niveau_nom' => $classe?->niveau?->nom ?? 'Tous les niveaux',
-                'total_eleves' => $rows->count(),
+                'titre'            => 'FICHE DE NOTES',
+                'classe_nom'       => $classe?->nom ?? 'Toutes les classes',
+                'section_nom'      => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
+                'niveau_nom'       => $classe?->niveau?->nom ?? 'Tous les niveaux',
+                'annee_pastorale'  => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'animateurs'       => $animateurs,
+                'total_eleves'     => $rows->count(),
             ],
-            'lignes' => $rows,
+            'colonnes' => ['N°', 'MATRICULE', 'NOMS ET PRÉNOMS', 'SEXE', 'ÉVAL 1', 'ÉVAL 2', 'ÉVAL 3', 'MOYENNE', 'OBSERVATION'],
+            'lignes'   => $rows,
         ]);
     }
 
@@ -85,7 +116,7 @@ class ImpressionController extends Controller
      */
     public function fichePresences(Request $request): JsonResponse
     {
-        $response = $this->ficheNotes($request);
+        $response = $this->listePresence($request);
         $data = $response->getData(true);
         if ($data['status'] === 'success') {
             $data['document']['titre'] = 'FICHE DE PRÉSENCES';
@@ -98,12 +129,81 @@ class ImpressionController extends Controller
      */
     public function listeCatechumenes(Request $request): JsonResponse
     {
-        $response = $this->ficheNotes($request);
-        $data = $response->getData(true);
-        if ($data['status'] === 'success') {
-            $data['document']['titre'] = 'REGISTRE & LISTE OFFICIELLE DES CATÉCHUMÈNES';
-        }
-        return response()->json($data);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
+
+        $annee = !empty($validated['annee_catechese_id'])
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
+
+        $classe = !empty($validated['classe_id'])
+            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->orWhere('id', $validated['classe_id'])->first()
+            : null;
+
+        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)
+            ->with(['catechumene.ceb', 'catechumene.parrainsMarraines'])
+            ->get();
+
+        $garcons = 0;
+        $filles = 0;
+        $baptises = 0;
+
+        $rows = $inscriptions->map(function ($ins, $index) use (&$garcons, &$filles, &$baptises) {
+            $cat = $ins->catechumene;
+            $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
+            if ($cat->sexe === 'M') $garcons++;
+            if ($cat->sexe === 'F') $filles++;
+            if ($cat->est_baptise) $baptises++;
+
+            return [
+                'numero'                  => sprintf('%02d', $index + 1),
+                'matricule'               => $cat->matricule,
+                'code_catechumene'        => $cat->matricule,
+                'nom'                     => mb_strtoupper($cat->nom),
+                'prenom'                  => $prenom,
+                'prenoms'                 => $prenom,
+                'nom_complet'             => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'nomPrenoms'              => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'sexe'                    => $cat->sexe,
+                'date_naissance'          => $cat->date_naissance ? (is_string($cat->date_naissance) ? substr($cat->date_naissance, 0, 10) : $cat->date_naissance->toDateString()) : null,
+                'lieu_naissance'          => $cat->lieu_naissance ?? '',
+                'telephone'               => $cat->telephone ?? '',
+                'telephone_parent'        => $cat->telephone_tuteur ?? ($cat->telephone_pere ?? ($cat->telephone_mere ?? $cat->telephone)),
+                'nom_pere'                => $cat->nom_pere ?? '',
+                'nom_mere'                => $cat->nom_mere ?? '',
+                'nom_tuteur'              => $cat->nom_tuteur ?? '',
+                'domicile'                => $cat->domicile ?? ($cat->adresse ?? ''),
+                'est_baptise'             => (bool) $cat->est_baptise,
+                'statut_bapteme'          => $cat->est_baptise ? 'Oui' : 'Non',
+                'date_bapteme'            => $cat->date_bapteme ? (is_string($cat->date_bapteme) ? substr($cat->date_bapteme, 0, 10) : $cat->date_bapteme->toDateString()) : '',
+                'paroisse_bapteme'        => $cat->paroisse_bapteme ?? '',
+                'classe_nom'              => $ins->classe?->nom ?? 'Non assigné',
+                'niveau_nom'              => $ins->niveau?->nom ?? '',
+                'section_nom'             => $ins->section?->nom ?? ($ins->niveau?->section?->nom ?? ''),
+                'ceb_nom'                 => $cat->ceb?->nom ?? '',
+                'frais_inscription_payes' => (bool) $ins->frais_inscription_payes,
+                'statut_paiement'         => $ins->frais_inscription_payes ? 'Payé' : 'Non payé',
+            ];
+        });
+
+        return response()->json([
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
+            'document' => [
+                'titre'                => 'REGISTRE & LISTE OFFICIELLE DES CATÉCHUMÈNES',
+                'classe_nom'           => $classe?->nom ?? 'Toutes les classes',
+                'section_nom'          => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
+                'niveau_nom'           => $classe?->niveau?->nom ?? 'Tous les niveaux',
+                'annee_pastorale'      => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'total_eleves'         => $rows->count(),
+                'effectif_garcons'     => $garcons,
+                'effectif_filles'      => $filles,
+                'total_baptises'       => $baptises,
+                'total_non_baptises'   => $rows->count() - $baptises,
+            ],
+            'colonnes' => ['N°', 'MATRICULE', 'NOMS ET PRÉNOMS', 'SEXE', 'DATE NAISS.', 'CONTACTS', 'BAPTÊME', 'CLASSE', 'FRAIS'],
+            'lignes'   => $rows,
+        ]);
     }
 
     /**
@@ -111,48 +211,54 @@ class ImpressionController extends Controller
      */
     public function suiviSacramental(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'sacrament' => ['nullable', 'string', 'max:100'],
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-            'section_id' => ['nullable', 'string', 'exists:sections,uuid'],
-            'niveau_id' => ['nullable', 'string', 'exists:niveaux,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
         $classe = !empty($validated['classe_id'])
-            ? Classe::with(['niveau.section'])->where('uuid', $validated['classe_id'])->first()
+            ? Classe::with(['niveau.section'])->where('uuid', $validated['classe_id'])->orWhere('id', $validated['classe_id'])->first()
             : null;
 
-        $sacramentLibelle = mb_strtoupper($validated['sacrament'] ?? 'PREMIÈRE COMMUNION');
+        $sacramentLibelle = mb_strtoupper($validated['sacrament'] ?? $request->input('sacrament', 'PREMIÈRE COMMUNION'));
 
-        $inscriptions = $this->getInscriptionsQuery($paroisseId, $annee?->id, $classe?->id, $validated)->get();
+        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)
+            ->with(['catechumene.parrainsMarraines'])
+            ->get();
 
         $rows = $inscriptions->map(function ($ins, $index) {
+            $cat = $ins->catechumene;
+            $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
+            $parrain = $cat->parrainsMarraines->firstWhere('type', 'parrain') ?? $cat->parrainsMarraines->first();
+
             return [
-                'numero' => sprintf('%02d', $index + 1),
-                'code_catechumene' => $ins->catechumene->code_catechumene,
-                'nom_complet' => mb_strtoupper($ins->catechumene->nom) . ' ' . $ins->catechumene->prenoms,
-                'contacts' => $ins->catechumene->telephone ?? $ins->catechumene->telephone_pere ?? '',
-                'dossiers' => [
-                    'fiche_identite' => '',
-                    'photos' => '',
-                    'carnet_bapteme' => '',
-                    'carnet_parrain' => '',
+                'numero'           => sprintf('%02d', $index + 1),
+                'matricule'        => $cat->matricule,
+                'code_catechumene' => $cat->matricule,
+                'nom'              => mb_strtoupper($cat->nom),
+                'prenom'           => $prenom,
+                'prenoms'          => $prenom,
+                'nom_complet'      => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'nomPrenoms'       => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'sexe'             => $cat->sexe,
+                'date_naissance'   => $cat->date_naissance ? (is_string($cat->date_naissance) ? substr($cat->date_naissance, 0, 10) : $cat->date_naissance->toDateString()) : null,
+                'contacts'         => $cat->telephone ?? ($cat->telephone_pere ?? ($cat->telephone_mere ?? $cat->telephone_tuteur ?? '')),
+                'parrain_marraine' => $parrain?->nom_prenoms ?? 'Non assigné',
+                'dossiers'         => [
+                    'fiche_identite' => '✓',
+                    'photos'         => '✓',
+                    'carnet_bapteme' => $cat->est_baptise ? '✓' : 'En attente',
+                    'carnet_parrain' => $parrain ? '✓' : 'En attente',
                 ],
-                'casuel' => [
-                    'payee' => '',
+                'casuel'           => [
+                    'payee'          => $ins->frais_inscription_payes ? 'Payé' : 'En attente',
                 ],
-                'retraite' => [
-                    'presence' => '',
-                    'bougie' => '',
-                    'photos' => '',
+                'retraite'         => [
+                    'presence'       => '',
+                    'bougie'         => '',
+                    'photos'         => '',
                     'retrait_photos' => '',
                     'retrait_carnet' => '',
                 ],
@@ -160,25 +266,26 @@ class ImpressionController extends Controller
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => "FICHE DE SUIVI DES CANDIDATS À LA {$sacramentLibelle} ANNÉE PASTORALE " . ($annee?->libelle ?? date('Y')),
-                'sacrament' => $sacramentLibelle,
-                'classe_nom' => $classe?->nom ?? 'Toutes les classes',
-                'section_nom' => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
-                'niveau_nom' => $classe?->niveau?->nom ?? 'Tous les niveaux',
-                'total_candidats' => $rows->count(),
+                'titre'            => "FICHE DE SUIVI DES CANDIDATS À LA {$sacramentLibelle} — " . ($annee?->libelle ?? date('Y')),
+                'sacrament'        => $sacramentLibelle,
+                'classe_nom'       => $classe?->nom ?? 'Toutes les classes',
+                'section_nom'      => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
+                'niveau_nom'       => $classe?->niveau?->nom ?? 'Tous les niveaux',
+                'annee_pastorale'  => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'total_candidats'  => $rows->count(),
             ],
             'colonnes' => [
-                'numero' => 'N°',
+                'numero'      => 'N°',
                 'nom_complet' => 'NOMS ET PRÉNOMS',
-                'contacts' => 'CONTACTS',
-                'dossiers' => ['Fiche d\'ident.', 'Photos', 'Carnet de baptême', 'Carnet parrain'],
-                'casuel' => ['payée'],
-                'retraite' => ['présence', 'bougie', 'Photos', 'Retrait photos', 'Retrait carnet'],
+                'contacts'    => 'CONTACTS',
+                'dossiers'    => ['Fiche d\'ident.', 'Photos', 'Carnet baptême', 'Carnet parrain'],
+                'casuel'      => ['Casuel'],
+                'retraite'    => ['Présence', 'Bougie', 'Photos', 'Retrait photos', 'Retrait carnet'],
             ],
-            'lignes' => $rows,
+            'lignes'   => $rows,
         ]);
     }
 
@@ -187,69 +294,76 @@ class ImpressionController extends Controller
      */
     public function listePresence(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-            'section_id' => ['nullable', 'string', 'exists:sections,uuid'],
-            'niveau_id' => ['nullable', 'string', 'exists:niveaux,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-            'debut_cours' => ['nullable', 'date'],
-            'jour' => ['nullable', 'string', 'in:Samedi,Dimanche,Mercredi'],
-            'nombre_seances' => ['nullable', 'integer', 'min:1', 'max:20'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
         $classe = !empty($validated['classe_id'])
-            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->first()
+            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->orWhere('id', $validated['classe_id'])->first()
             : null;
 
-        $inscriptions = $this->getInscriptionsQuery($paroisseId, $annee?->id, $classe?->id, $validated)->get();
+        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)->get();
 
         $dateDebut = !empty($validated['debut_cours']) ? Carbon::parse($validated['debut_cours']) : Carbon::now();
-        $nbSeances = $validated['nombre_seances'] ?? 12;
+        $nbSeances = (int) ($validated['nombre_seances'] ?? $request->input('nombre_seances', 12));
         $datesSeances = [];
 
         for ($i = 0; $i < $nbSeances; $i++) {
             $datesSeances[] = $dateDebut->copy()->addWeeks($i)->format('d/m');
         }
 
-        $animateurs = $classe ? $classe->affectations->map(fn($a) => $a->animateur->nom . ' ' . $a->animateur->prenoms)->values()->toArray() : [];
+        $animateurs = $classe ? $classe->affectations->map(fn($a) => trim($a->animateur->nom . ' ' . ($a->animateur->prenoms ?? $a->animateur->prenom ?? '')))->values()->toArray() : [];
 
-        $rows = $inscriptions->map(function ($ins, $index) use ($datesSeances) {
+        // Récupérer les séances et présences réelles enregistrées dans la base si disponibles
+        $seanceIds = $classe ? Seance::where('classe_id', $classe->id)->pluck('id') : collect();
+        $presencesGrouped = Presence::whereIn('seance_id', $seanceIds)->get()->groupBy('catechumene_id');
+
+        $rows = $inscriptions->map(function ($ins, $index) use ($datesSeances, $presencesGrouped) {
+            $cat = $ins->catechumene;
+            $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
+            $catPresences = $presencesGrouped->get($cat->id, collect());
+
             $seancesMap = [];
             foreach ($datesSeances as $d) {
                 $seancesMap[$d] = '';
             }
 
             return [
-                'numero' => sprintf('%02d', $index + 1),
-                'matricule' => $ins->catechumene->code_catechumene,
-                'nom_complet' => mb_strtoupper($ins->catechumene->nom) . ' ' . $ins->catechumene->prenoms,
-                'telephone' => $ins->catechumene->telephone ?? $ins->catechumene->telephone_pere ?? '',
-                'classe_scolaire' => $ins->catechumene->classe_scolaire ?? '',
-                'seances' => $seancesMap,
+                'numero'           => sprintf('%02d', $index + 1),
+                'matricule'        => $cat->matricule,
+                'code_catechumene' => $cat->matricule,
+                'nom'              => mb_strtoupper($cat->nom),
+                'prenom'           => $prenom,
+                'prenoms'          => $prenom,
+                'nom_complet'      => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'nomPrenoms'       => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'sexe'             => $cat->sexe,
+                'telephone'        => $cat->telephone ?? ($cat->telephone_pere ?? ''),
+                'classe_scolaire'  => $cat->classe_scolaire ?? '',
+                'seances'          => $seancesMap,
+                'total_presences'  => $catPresences->where('statut', 'present')->count(),
+                'total_absences'   => $catPresences->where('statut', 'absent')->count(),
             ];
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => 'LISTE DE PRÉSENCE',
-                'classe_nom' => $classe?->nom ?? 'Toutes les classes',
-                'jour' => $validated['jour'] ?? ($classe?->jour_rencontre ?? 'Samedi'),
-                'section_nom' => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
-                'niveau_nom' => $classe?->niveau?->nom ?? 'Tous les niveaux',
-                'animateurs' => $animateurs,
-                'dates_seances' => $datesSeances,
-                'total_eleves' => $rows->count(),
+                'titre'            => 'LISTE DE PRÉSENCE',
+                'classe_nom'       => $classe?->nom ?? 'Toutes les classes',
+                'jour'             => $validated['jour'] ?? ($request->input('jour') ?? ($classe?->jour_rencontre ?? 'Samedi')),
+                'section_nom'      => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
+                'niveau_nom'       => $classe?->niveau?->nom ?? 'Tous les niveaux',
+                'annee_pastorale'  => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'animateurs'       => $animateurs,
+                'dates_seances'    => $datesSeances,
+                'total_eleves'     => $rows->count(),
             ],
-            'lignes' => $rows,
+            'lignes'   => $rows,
         ]);
     }
 
@@ -258,53 +372,64 @@ class ImpressionController extends Controller
      */
     public function ficheBilanAnnuel(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-            'section_id' => ['nullable', 'string', 'exists:sections,uuid'],
-            'niveau_id' => ['nullable', 'string', 'exists:niveaux,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
         $classe = !empty($validated['classe_id'])
-            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->first()
+            ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->orWhere('id', $validated['classe_id'])->first()
             : null;
 
-        $inscriptions = $this->getInscriptionsQuery($paroisseId, $annee?->id, $classe?->id, $validated)->get();
-        $animateurs = $classe ? $classe->affectations->map(fn($a) => $a->animateur->nom . ' ' . $a->animateur->prenoms)->values()->toArray() : [];
+        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)->get();
+        $animateurs = $classe ? $classe->affectations->map(fn($a) => trim($a->animateur->nom . ' ' . ($a->animateur->prenoms ?? $a->animateur->prenom ?? '')))->values()->toArray() : [];
 
-        $rows = $inscriptions->map(function ($ins, $index) {
+        // Charger les décisions de fin d'année et bulletins si existants
+        $decisions = DecisionFinAnnee::where('paroisse_configuration_id', $paroisse->id)
+            ->when($annee, fn($q) => $q->where('annee_catechese_id', $annee->id))
+            ->get()
+            ->keyBy('catechumene_id');
+
+        $rows = $inscriptions->map(function ($ins, $index) use ($decisions) {
+            $cat = $ins->catechumene;
+            $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
+            $decision = $decisions->get($cat->id);
+
             return [
-                'numero' => sprintf('%02d', $index + 1),
-                'nom_complet' => mb_strtoupper($ins->catechumene->nom) . ' ' . $ins->catechumene->prenoms,
-                'cours' => '',
-                'messe' => '',
-                'ceb' => '',
-                'mouvt' => '',
-                'moyenne' => '',
-                'decision' => '',
+                'numero'           => sprintf('%02d', $index + 1),
+                'matricule'        => $cat->matricule,
+                'code_catechumene' => $cat->matricule,
+                'nom'              => mb_strtoupper($cat->nom),
+                'prenom'           => $prenom,
+                'prenoms'          => $prenom,
+                'nom_complet'      => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'nomPrenoms'       => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'cours'            => $decision?->moyenne_annuelle ? round($decision->moyenne_annuelle, 2) : '',
+                'messe'            => $decision?->note_assiduite ?? '',
+                'ceb'              => '',
+                'mouvt'            => '',
+                'moyenne'          => $decision?->moyenne_annuelle ? round($decision->moyenne_annuelle, 2) : '',
+                'decision'         => $decision?->decision ?? '',
+                'observation'      => $decision?->observations ?? '',
             ];
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => 'FICHE DE BILAN ANNUEL',
-                'classe_nom' => $classe?->nom ?? 'Toutes les classes',
-                'section_nom' => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
-                'niveau_nom' => $classe?->niveau?->nom ?? 'Tous les niveaux',
-                'animateurs' => $animateurs,
-                'total_eleves' => $rows->count(),
+                'titre'            => 'FICHE DE BILAN ANNUEL',
+                'classe_nom'       => $classe?->nom ?? 'Toutes les classes',
+                'section_nom'      => $classe?->niveau?->section?->nom ?? 'Toutes les sections',
+                'niveau_nom'       => $classe?->niveau?->nom ?? 'Tous les niveaux',
+                'annee_pastorale'  => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'animateurs'       => $animateurs,
+                'total_eleves'     => $rows->count(),
             ],
-            'colonnes' => ['N°', 'NOMS ET PRÉNOMS', 'COURS', 'MESSE', 'CEB', 'MOUVT', 'MOYENNE', 'DÉCISION'],
-            'lignes' => $rows,
+            'colonnes' => ['N°', 'MATRICULE', 'NOMS ET PRÉNOMS', 'COURS', 'MESSE', 'CEB', 'MOUVT', 'MOYENNE', 'DÉCISION'],
+            'lignes'   => $rows,
         ]);
     }
 
@@ -313,200 +438,216 @@ class ImpressionController extends Controller
      */
     public function ficheRenseignementBapteme(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'catechumene_id' => ['nullable', 'string', 'exists:catechumenes,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
-        $catechumenes = $this->getCatechumenesQuery($paroisseId, $validated)->get();
+        $catechumenes = $this->getCatechumenesQuery($paroisse->id, $validated)->get();
 
         $fiches = $catechumenes->map(function ($c) use ($annee) {
+            $prenom = $c->prenoms ?? ($c->prenom ?? '');
             $parrain = $c->parrainsMarraines->firstWhere('type', 'parrain');
             $marraine = $c->parrainsMarraines->firstWhere('type', 'marraine');
 
             return [
-                'annee_pastorale' => $annee?->libelle ?? date('Y'),
-                'nom_et_prenoms' => mb_strtoupper($c->nom) . ' ' . $c->prenoms,
-                'date_naissance' => $c->date_naissance?->toDateString(),
-                'lieu_naissance' => $c->lieu_naissance,
-                'profession' => $c->profession ?? '',
-                'contact' => $c->telephone,
-                'domicilie_a' => $c->domicile ?? $c->adresse,
-                'nom_pere' => $c->nom_pere,
-                'origine_pere' => $c->origine_pere ?? '',
-                'nom_mere' => $c->nom_mere,
-                'origine_mere' => $c->origine_mere ?? '',
-                'parrain' => [
-                    'nom_prenoms' => $parrain?->nom_prenoms ?? '',
-                    'domicilie_a' => $parrain?->domicile ?? '',
-                    'contact' => $parrain?->telephone ?? '',
-                    'represente_par' => $parrain?->representant_nom ?? '',
+                'annee_pastorale'   => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'matricule'         => $c->matricule,
+                'nom'               => mb_strtoupper($c->nom),
+                'prenom'            => $prenom,
+                'prenoms'           => $prenom,
+                'nom_et_prenoms'    => trim(mb_strtoupper($c->nom) . ' ' . $prenom),
+                'nom_complet'       => trim(mb_strtoupper($c->nom) . ' ' . $prenom),
+                'sexe'              => $c->sexe,
+                'date_naissance'    => $c->date_naissance ? (is_string($c->date_naissance) ? substr($c->date_naissance, 0, 10) : $c->date_naissance->toDateString()) : null,
+                'lieu_naissance'    => $c->lieu_naissance ?? '',
+                'profession'        => $c->profession ?? '',
+                'contact'           => $c->telephone ?? ($c->telephone_pere ?? ''),
+                'telephone'         => $c->telephone ?? '',
+                'domicilie_a'       => $c->domicile ?? ($c->adresse ?? ''),
+                'nom_pere'          => $c->nom_pere ?? '',
+                'origine_pere'      => $c->origine_pere ?? '',
+                'nom_mere'          => $c->nom_mere ?? '',
+                'origine_mere'      => $c->origine_mere ?? '',
+                'parrain'           => [
+                    'nom_prenoms'          => $parrain?->nom_prenoms ?? '',
+                    'domicilie_a'          => $parrain?->domicile ?? '',
+                    'contact'              => $parrain?->telephone ?? '',
+                    'represente_par'       => $parrain?->representant_nom ?? '',
                     'representant_contact' => $parrain?->representant_contact ?? '',
                 ],
-                'marraine' => [
-                    'nom_prenoms' => $marraine?->nom_prenoms ?? '',
-                    'domicilie_a' => $marraine?->domicile ?? '',
-                    'contact' => $marraine?->telephone ?? '',
-                    'represente_par' => $marraine?->representant_nom ?? '',
+                'marraine'          => [
+                    'nom_prenoms'          => $marraine?->nom_prenoms ?? '',
+                    'domicilie_a'          => $marraine?->domicile ?? '',
+                    'contact'              => $marraine?->telephone ?? '',
+                    'represente_par'       => $marraine?->representant_nom ?? '',
                     'representant_contact' => $marraine?->representant_contact ?? '',
                 ],
                 'dossier_a_fournir' => [
-                    '1. Photocopie du carnet de baptême à jour du parrain ou de la marraine (1: page de couverture - 2: page des sacrements - 3: page du denier de culte ajour)',
+                    '1. Photocopie du carnet de baptême à jour du parrain ou de la marraine',
                     '2. Photocopie de l\'extrait d\'acte de naissance',
-                    '3. Une (1) photo d\'identité',
+                    '3. Une (1) photo d\'identité récente',
                 ],
             ];
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => 'FICHE DE RENSEIGNEMENTS SACREMENT DE BAPTÊME',
+                'titre'        => 'FICHE DE RENSEIGNEMENTS SACREMENT DE BAPTÊME',
                 'total_fiches' => $fiches->count(),
             ],
-            'fiches' => $fiches,
+            'fiches'   => $fiches,
         ]);
     }
 
     /**
-     * Générer la "Fiche de Renseignement Première Communion" (Screenshots 1 & 2 récents).
+     * Générer la "Fiche de Renseignement Première Communion".
      */
     public function ficheRenseignementPremiereCommunion(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'catechumene_id' => ['nullable', 'string', 'exists:catechumenes,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
-        $catechumenes = $this->getCatechumenesQuery($paroisseId, $validated)->get();
+        $catechumenes = $this->getCatechumenesQuery($paroisse->id, $validated)->get();
 
         $fiches = $catechumenes->map(function ($c) use ($annee) {
+            $prenom = $c->prenoms ?? ($c->prenom ?? '');
             $pm = $c->parrainsMarraines->first();
 
             return [
-                'annee_pastorale' => $annee?->libelle ?? date('Y'),
-                'nom' => mb_strtoupper($c->nom),
-                'prenoms' => $c->prenoms,
-                'date_naissance' => $c->date_naissance?->toDateString(),
-                'lieu_naissance' => $c->lieu_naissance,
-                'profession' => $c->profession ?? '',
-                'telephone' => $c->telephone,
-                'domicile' => $c->domicile ?? $c->adresse,
-                'sacrements' => [
+                'annee_pastorale'    => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'matricule'          => $c->matricule,
+                'nom'                => mb_strtoupper($c->nom),
+                'prenom'             => $prenom,
+                'prenoms'            => $prenom,
+                'nom_complet'        => trim(mb_strtoupper($c->nom) . ' ' . $prenom),
+                'date_naissance'     => $c->date_naissance ? (is_string($c->date_naissance) ? substr($c->date_naissance, 0, 10) : $c->date_naissance->toDateString()) : null,
+                'lieu_naissance'     => $c->lieu_naissance ?? '',
+                'profession'         => $c->profession ?? '',
+                'telephone'          => $c->telephone ?? '',
+                'domicile'           => $c->domicile ?? ($c->adresse ?? ''),
+                'sacrements'         => [
                     'bapteme' => [
-                        'num_carnet_bapteme' => $c->num_carnet_bapteme ?? '',
-                        'date' => $c->date_bapteme?->toDateString() ?? '',
-                        'diocese' => $c->diocese_bapteme ?? '',
-                        'ville' => $c->ville_bapteme ?? '',
-                        'paroisse' => $c->paroisse_bapteme ?? '',
+                        'num_carnet_bapteme'          => $c->num_carnet_bapteme ?? '',
+                        'date'                        => $c->date_bapteme ? (is_string($c->date_bapteme) ? substr($c->date_bapteme, 0, 10) : $c->date_bapteme->toDateString()) : '',
+                        'diocese'                     => $c->diocese_bapteme ?? '',
+                        'ville'                       => $c->ville_bapteme ?? '',
+                        'paroisse'                    => $c->paroisse_bapteme ?? '',
                         'parrain_ou_marraine_origine' => $pm?->nom_prenoms ?? '',
-                        'represente_par' => $pm?->representant_nom ?? '',
-                        'contact' => $pm?->representant_contact ?? $pm?->telephone ?? '',
+                        'represente_par'              => $pm?->representant_nom ?? '',
+                        'contact'                     => $pm?->representant_contact ?? ($pm?->telephone ?? ''),
                     ],
                 ],
                 'document_a_fournir' => [
-                    '*Carnet de baptême à jour',
-                    '*Une photo d\'identité',
-                    '*Photocopie du carnet de baptême du parrain : (1 : page de couverture – 2 : page des sacrements – 3 : page du denier de culte ajour)',
+                    '* Carnet de baptême à jour',
+                    '* Une (1) photo d\'identité récente',
+                    '* Photocopie du carnet de baptême du parrain/marraine à jour',
                 ],
             ];
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => 'FICHE DE RENSEIGNEMENT PREMIERE COMMUNION',
+                'titre'        => 'FICHE DE RENSEIGNEMENT PREMIERE COMMUNION',
                 'total_fiches' => $fiches->count(),
             ],
-            'fiches' => $fiches,
+            'fiches'   => $fiches,
         ]);
     }
 
     /**
-     * Générer la "Fiche de Renseignement Confirmation" (Screenshots 3 & 4 récents).
+     * Générer la "Fiche de Renseignement Confirmation".
      */
     public function ficheRenseignementConfirmation(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
-        $paroisse = ParoisseConfiguration::findOrFail($paroisseId);
-
-        $validated = $request->validate([
-            'catechumene_id' => ['nullable', 'string', 'exists:catechumenes,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
-        ]);
+        $paroisse = $this->resolveParoisse($request);
+        $validated = $this->validateFilters($request);
 
         $annee = !empty($validated['annee_catechese_id'])
-            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->first()
-            : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('est_active', true)->first();
+            ? AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->orWhere('id', $validated['annee_catechese_id'])->first()
+            : AnneeCatechese::resolveAnnee($request, $paroisse->id);
 
-        $catechumenes = $this->getCatechumenesQuery($paroisseId, $validated)->get();
+        $catechumenes = $this->getCatechumenesQuery($paroisse->id, $validated)->get();
 
         $fiches = $catechumenes->map(function ($c) use ($annee) {
-            $parrain = $c->parrainsMarraines->firstWhere('type', 'parrain');
+            $prenom = $c->prenoms ?? ($c->prenom ?? '');
+            $parrain = $c->parrainsMarraines->firstWhere('type', 'parrain') ?? $c->parrainsMarraines->first();
 
             return [
-                'annee_pastorale' => $annee?->libelle ?? date('Y'),
-                'nom' => mb_strtoupper($c->nom),
-                'prenoms' => $c->prenoms,
-                'date_naissance' => $c->date_naissance?->toDateString(),
-                'lieu_naissance' => $c->lieu_naissance,
-                'profession' => $c->profession ?? '',
-                'telephone' => $c->telephone,
-                'domicile' => $c->domicile ?? $c->adresse,
-                'sacrements' => [
-                    'bapteme' => [
+                'annee_pastorale'    => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+                'matricule'          => $c->matricule,
+                'nom'                => mb_strtoupper($c->nom),
+                'prenom'             => $prenom,
+                'prenoms'            => $prenom,
+                'nom_complet'        => trim(mb_strtoupper($c->nom) . ' ' . $prenom),
+                'date_naissance'     => $c->date_naissance ? (is_string($c->date_naissance) ? substr($c->date_naissance, 0, 10) : $c->date_naissance->toDateString()) : null,
+                'lieu_naissance'     => $c->lieu_naissance ?? '',
+                'profession'         => $c->profession ?? '',
+                'telephone'          => $c->telephone ?? '',
+                'domicile'           => $c->domicile ?? ($c->adresse ?? ''),
+                'sacrements'         => [
+                    'bapteme'            => [
                         'num_carnet_bapteme' => $c->num_carnet_bapteme ?? '',
-                        'date' => $c->date_bapteme?->toDateString() ?? '',
-                        'diocese' => $c->diocese_bapteme ?? '',
-                        'ville' => $c->ville_bapteme ?? '',
-                        'paroisse' => $c->paroisse_bapteme ?? '',
-                        'parrain' => $parrain?->nom_prenoms ?? '',
+                        'date'               => $c->date_bapteme ? (is_string($c->date_bapteme) ? substr($c->date_bapteme, 0, 10) : $c->date_bapteme->toDateString()) : '',
+                        'diocese'            => $c->diocese_bapteme ?? '',
+                        'ville'              => $c->ville_bapteme ?? '',
+                        'paroisse'           => $c->paroisse_bapteme ?? '',
+                        'parrain'            => $parrain?->nom_prenoms ?? '',
                     ],
                     'premiere_communion' => [
-                        'date' => $c->date_premiere_communion?->toDateString() ?? '',
+                        'date'     => $c->date_premiere_communion ? (is_string($c->date_premiere_communion) ? substr($c->date_premiere_communion, 0, 10) : $c->date_premiere_communion->toDateString()) : '',
                         'paroisse' => $c->paroisse_premiere_communion ?? '',
                     ],
-                    'confirmation' => [
-                        'date' => $c->date_confirmation?->toDateString() ?? '',
-                        'paroisse' => $c->paroisse_confirmation ?? '',
+                    'confirmation'       => [
+                        'date'                  => $c->date_confirmation ? (is_string($c->date_confirmation) ? substr($c->date_confirmation, 0, 10) : $c->date_confirmation->toDateString()) : '',
+                        'paroisse'              => $c->paroisse_confirmation ?? '',
                         'ministre_du_sacrement' => $c->ministre_confirmation ?? '',
                     ],
                 ],
-                'dossier_a_fournir' => [
-                    '*Carnet de baptême à jour',
-                    '*Une photo d\'identité',
-                    '*Photocopie du carnet de baptême du parrain',
+                'dossier_a_fournir'  => [
+                    '* Carnet de baptême à jour',
+                    '* Une (1) photo d\'identité récente',
+                    '* Photocopie du carnet de baptême du parrain/marraine de confirmation',
                 ],
             ];
         });
 
         return response()->json([
-            'status' => 'success',
-            'entete' => $this->getEntetePayload($paroisse, $annee),
+            'status'   => 'success',
+            'entete'   => $this->getEntetePayload($paroisse, $annee),
             'document' => [
-                'titre' => 'FICHE DE RENSEIGNEMENT CONFIRMATION',
+                'titre'        => 'FICHE DE RENSEIGNEMENT CONFIRMATION',
                 'total_fiches' => $fiches->count(),
             ],
-            'fiches' => $fiches,
+            'fiches'   => $fiches,
+        ]);
+    }
+
+    /**
+     * Helper pour valider les paramètres flexibles (POST body ou GET query).
+     */
+    private function validateFilters(Request $request): array
+    {
+        return $request->validate([
+            'annee_catechese_id' => ['nullable', 'string'],
+            'section_id'         => ['nullable', 'string'],
+            'niveau_id'          => ['nullable', 'string'],
+            'classe_id'          => ['nullable', 'string'],
+            'catechumene_id'     => ['nullable', 'string'],
+            'sacrament'          => ['nullable', 'string'],
+            'debut_cours'        => ['nullable', 'date'],
+            'jour'               => ['nullable', 'string'],
+            'nombre_seances'     => ['nullable', 'integer'],
         ]);
     }
 
@@ -515,36 +656,62 @@ class ImpressionController extends Controller
      */
     private function getCatechumenesQuery(int $paroisseId, array $validated)
     {
-        $query = Catechumene::with('parrainsMarraines')
-            ->where('paroisse_configuration_id', $paroisseId);
+        $query = Catechumene::with(['parrainsMarraines', 'ceb'])
+            ->where(function ($q) use ($paroisseId) {
+                $q->where('paroisse_configuration_id', $paroisseId)
+                  ->orWhereNull('paroisse_configuration_id');
+            });
 
         if (!empty($validated['catechumene_id'])) {
-            $query->where('uuid', $validated['catechumene_id']);
+            $catVal = $validated['catechumene_id'];
+            $query->where(function ($q) use ($catVal) {
+                $q->where('uuid', $catVal)
+                  ->orWhere('id', is_numeric($catVal) ? (int) $catVal : 0)
+                  ->orWhere('matricule', $catVal);
+            });
         } elseif (!empty($validated['classe_id'])) {
-            $classeId = Classe::where('uuid', $validated['classe_id'])->value('id');
+            $clsVal = $validated['classe_id'];
+            $classeId = is_numeric($clsVal) ? (int) $clsVal : Classe::where('uuid', $clsVal)->value('id');
             if ($classeId) {
                 $query->whereHas('inscriptionsAnnuelles', fn($q) => $q->where('classe_id', $classeId));
             }
+        } elseif (!empty($validated['niveau_id'])) {
+            $nivVal = $validated['niveau_id'];
+            $niveauId = is_numeric($nivVal) ? (int) $nivVal : Niveau::where('uuid', $nivVal)->value('id');
+            if ($niveauId) {
+                $query->whereHas('inscriptionsAnnuelles', fn($q) => $q->where('niveau_id', $niveauId));
+            }
         }
 
-        return $query;
+        return $query->orderBy('nom', 'asc')->orderBy('prenoms', 'asc');
     }
 
     /**
      * Helper réutilisable pour construire l'entête paroissial.
      */
-    private function getEntetePayload(ParoisseConfiguration $paroisse, ?AnneeCatechese $annee): array
+    private function getEntetePayload(CatecheseConfiguration $paroisse, ?AnneeCatechese $annee): array
     {
+        $nomParoisse = $paroisse->nom_paroisse ?? ($paroisse->nom ?? 'Paroisse Catholique');
+
         return [
-            'diocese' => mb_strtoupper($paroisse->diocese ?? 'Archidiocèse'),
-            'doyenne' => mb_strtoupper($paroisse->doyenne ?? 'Doyenné'),
-            'paroisse' => mb_strtoupper($paroisse->nom),
-            'adresse' => $paroisse->adresse ?? 'Adresse paroissiale',
-            'telephone' => $paroisse->telephone,
-            'email' => $paroisse->email,
-            'logo_url' => $paroisse->logo_path ? asset('storage/' . $paroisse->logo_path) : null,
-            'coordination' => $paroisse->coordination_nom ?? 'Coordination de la Catéchèse',
-            'annee' => $annee?->libelle ?? date('Y'),
+            'diocese'          => mb_strtoupper($paroisse->diocese ?? 'ARCHIDIOCÈSE D\'ABIDJAN'),
+            'doyenne'          => mb_strtoupper($paroisse->doyenne ?? 'DOYENNÉ'),
+            'paroisse'         => mb_strtoupper($nomParoisse),
+            'nom_paroisse'     => mb_strtoupper($nomParoisse),
+            'nom'              => mb_strtoupper($nomParoisse),
+            'ville'            => $paroisse->ville ?? 'Abidjan',
+            'commune'          => $paroisse->commune ?? 'Plateau',
+            'adresse'          => $paroisse->adresse ?? 'Avenue Jean-Paul II, Plateau, Abidjan',
+            'telephone'        => $paroisse->telephone ?? '+225 2720212223',
+            'email'            => $paroisse->email ?? 'contact@saintpaul-plateau.ci',
+            'site_web'         => $paroisse->site_web ?? '',
+            'cure_nom'         => $paroisse->cure_nom ?? 'Père Curé',
+            'coordination'     => $paroisse->coordination_nom ?? 'Coordination Pastorale de la Catéchèse',
+            'coordination_nom' => $paroisse->coordination_nom ?? 'Coordination Pastorale de la Catéchèse',
+            'logo_url'         => $paroisse->logo_url ?? ($paroisse->logo_path ? asset('storage/' . $paroisse->logo_path) : null),
+            'annee'            => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+            'annee_libelle'    => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
+            'date_edition'     => now()->format('d/m/Y'),
         ];
     }
 
@@ -553,8 +720,11 @@ class ImpressionController extends Controller
      */
     private function getInscriptionsQuery(int $paroisseId, ?int $anneeId, ?int $classeId, array $validated)
     {
-        $query = InscriptionAnnuelle::with(['catechumene', 'classe', 'niveau.section'])
-            ->where('inscriptions_annuelles.paroisse_configuration_id', $paroisseId);
+        $query = InscriptionAnnuelle::with(['catechumene', 'classe', 'niveau.section', 'section'])
+            ->where(function ($q) use ($paroisseId) {
+                $q->where('inscriptions_annuelles.paroisse_configuration_id', $paroisseId)
+                  ->orWhereNull('inscriptions_annuelles.paroisse_configuration_id');
+            });
 
         if ($anneeId) {
             $query->where('inscriptions_annuelles.annee_catechese_id', $anneeId);
@@ -563,15 +733,18 @@ class ImpressionController extends Controller
         if ($classeId) {
             $query->where('inscriptions_annuelles.classe_id', $classeId);
         } elseif (!empty($validated['niveau_id'])) {
-            $niveauId = Niveau::where('uuid', $validated['niveau_id'])->value('id');
+            $nivVal = $validated['niveau_id'];
+            $niveauId = is_numeric($nivVal) ? (int) $nivVal : Niveau::where('uuid', $nivVal)->value('id');
             if ($niveauId) {
                 $query->where('inscriptions_annuelles.niveau_id', $niveauId);
             }
         } elseif (!empty($validated['section_id'])) {
-            $sectionId = Section::where('uuid', $validated['section_id'])->value('id');
+            $secVal = $validated['section_id'];
+            $sectionId = is_numeric($secVal) ? (int) $secVal : Section::where('uuid', $secVal)->value('id');
             if ($sectionId) {
-                $query->whereHas('niveau', function ($q) use ($sectionId) {
-                    $q->where('section_id', $sectionId);
+                $query->where(function ($q) use ($sectionId) {
+                    $q->where('inscriptions_annuelles.section_id', $sectionId)
+                      ->orWhereHas('niveau', fn($nq) => $nq->where('section_id', $sectionId));
                 });
             }
         }

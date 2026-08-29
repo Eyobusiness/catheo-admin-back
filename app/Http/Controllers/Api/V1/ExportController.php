@@ -76,7 +76,7 @@ class ExportController extends Controller
 
         foreach ($catechumenes as $cat) {
             $rows[] = [
-                $cat->code_catechumene,
+                $cat->matricule,
                 $cat->nom,
                 $cat->prenoms,
                 $cat->sexe,
@@ -122,7 +122,7 @@ class ExportController extends Controller
 
         foreach ($presences as $p) {
             $rows[] = [
-                $p->catechumene?->code_catechumene ?? '',
+                $p->catechumene?->matricule ?? '',
                 ($p->catechumene?->nom . ' ' . $p->catechumene?->prenoms),
                 $p->seance?->classe?->libelle ?? 'N/A',
                 $p->seance?->titre ?? 'Séance',

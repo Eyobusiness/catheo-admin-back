@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\DashboardSummaryResource;
 use App\Models\AffectationAnimateur;
 use App\Models\Animateur;
 use App\Models\AnneeCatechese;
+use App\Models\Annonce;
 use App\Models\AuditLog;
 use App\Models\BulletinTrimestriel;
 use App\Models\CaisseParoissiale;
@@ -22,12 +24,20 @@ use App\Models\Seance;
 use App\Models\Section;
 use App\Models\Tarif;
 use App\Models\User;
+use App\Services\DashboardService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    protected DashboardService $dashboardService;
+
+    public function __construct(DashboardService $dashboardService)
+    {
+        $this->dashboardService = $dashboardService;
+    }
+
     /**
      * Résumé du Tableau de Bord Universel (S'adapte automatiquement au type de compte : Super Admin, Admin Paroissial, Animateur ou Parent).
      */
@@ -51,100 +61,16 @@ class DashboardController extends Controller
     }
 
     /**
-     * Tableau de bord Administrateur Paroissial / Super Admin.
+     * Tableau de bord Administrateur Paroissial / Pilotage Pastoral & Administratif (Sans finances).
      */
     public function adminDashboard(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? 1;
+        $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
 
-        // 1. KPI En-tête
-        $totalCatechumenes = Catechumene::where('paroisse_configuration_id', $paroisseId)->where('statut', 'actif')->count();
-        $totalSections = Section::where('paroisse_configuration_id', $paroisseId)->count();
-        $totalClasses = Classe::where('paroisse_configuration_id', $paroisseId)->count();
-        $totalAnimateurs = Animateur::where('paroisse_configuration_id', $paroisseId)->count();
-        $preinscriptionsEnAttente = Preinscription::where('paroisse_configuration_id', $paroisseId)->where('statut', 'en_attente')->count();
+        $dashboardData = $this->dashboardService->getAdminDashboardData($paroisseId, $annee);
 
-        // 2. Répartition par Section
-        $sections = Section::where('paroisse_configuration_id', $paroisseId)->get();
-        $repartitionSections = [];
-        foreach ($sections as $sec) {
-            $count = Catechumene::where('paroisse_configuration_id', $paroisseId)
-                ->whereHas('inscriptionsAnnuelles.niveau', function ($q) use ($sec) {
-                    $q->where('section_id', $sec->id);
-                })->count();
-
-            $pct = $totalCatechumenes > 0 ? round(($count / $totalCatechumenes) * 100, 1) : 0;
-            $repartitionSections[] = [
-                'id' => $sec->uuid,
-                'nom' => $sec->nom,
-                'effectif' => $count,
-                'pourcentage' => $pct,
-            ];
-        }
-
-        // 3. Répartition par Niveau
-        $niveaux = Niveau::where('paroisse_configuration_id', $paroisseId)->get();
-        $repartitionNiveaux = [];
-        foreach ($niveaux as $niv) {
-            $count = Catechumene::where('paroisse_configuration_id', $paroisseId)
-                ->whereHas('inscriptionsAnnuelles', function ($q) use ($niv) {
-                    $q->where('niveau_id', $niv->id);
-                })->count();
-
-            $pct = $totalCatechumenes > 0 ? round(($count / $totalCatechumenes) * 100, 1) : 0;
-            $repartitionNiveaux[] = [
-                'id' => $niv->uuid,
-                'nom' => $niv->nom,
-                'effectif' => $count,
-                'pourcentage' => $pct,
-            ];
-        }
-
-        // 4. Situation Financière
-        $montantEncaisse = (float) Paiement::where('paroisse_configuration_id', $paroisseId)->where('statut', 'valide')->sum('montant_total');
-        $tarifMoyen = (float) Tarif::where('paroisse_configuration_id', $paroisseId)->where('type_tarif', 'inscription')->avg('montant') ?: 15000;
-        $montantAttendu = $totalCatechumenes * $tarifMoyen;
-        if ($montantAttendu < $montantEncaisse) {
-            $montantAttendu = $montantEncaisse * 1.33;
-        }
-        $resteAPayer = max(0, $montantAttendu - $montantEncaisse);
-        $tauxRecouvrement = $montantAttendu > 0 ? round(($montantEncaisse / $montantAttendu) * 100, 1) : 100;
-
-        // 5. Effectifs par Classe
-        $classes = Classe::where('paroisse_configuration_id', $paroisseId)->with('niveau.section')->get();
-        $effectifsClasses = [];
-        foreach ($classes as $cl) {
-            $effectifActuel = InscriptionAnnuelle::where('classe_id', $cl->id)->count();
-            $capaciteMax = $cl->capacite_max ?? 30;
-            $pct = $capaciteMax > 0 ? round(($effectifActuel / $capaciteMax) * 100, 1) : 0;
-
-            $effectifsClasses[] = [
-                'id' => $cl->uuid,
-                'nom' => $cl->nom,
-                'section_nom' => $cl->niveau?->section?->nom ?? 'Général',
-                'effectif_actuel' => $effectifActuel,
-                'capacite_max' => $capaciteMax,
-                'pourcentage' => $pct,
-            ];
-        }
-
-        // 6. Préparation des Sacrements
-        $baptemeCandidats = Catechumene::where('paroisse_configuration_id', $paroisseId)->where('est_baptise', false)->count();
-        $communionCandidats = Catechumene::where('paroisse_configuration_id', $paroisseId)
-            ->whereHas('inscriptionsAnnuelles.niveau', function ($q) {
-                $q->where('nom', 'like', '%2%')->orWhere('nom', 'like', '%communion%');
-            })->count();
-        $confirmationCandidats = Catechumene::where('paroisse_configuration_id', $paroisseId)
-            ->whereHas('inscriptionsAnnuelles.niveau', function ($q) {
-                $q->where('nom', 'like', '%3%')->orWhere('nom', 'like', '%confirmation%');
-            })->count();
-
-        // 7. Alertes & Notifications
-        $paiementsEnRetard = InscriptionAnnuelle::where('paroisse_configuration_id', $paroisseId)->where('frais_inscription_payes', false)->count();
-        $catechumenesNonAffectes = InscriptionAnnuelle::where('paroisse_configuration_id', $paroisseId)->whereNull('classe_id')->count();
-        $documentsManquants = Preinscription::where('paroisse_configuration_id', $paroisseId)->whereNull('photo_url')->count();
-
-        // 8. Activités Récentes
+        // Activités Récentes pour l'historique
         $activites = AuditLog::with('user')
             ->where('paroisse_configuration_id', $paroisseId)
             ->latest()
@@ -152,48 +78,21 @@ class DashboardController extends Controller
             ->get()
             ->map(function ($log) {
                 return [
-                    'id' => $log->uuid,
-                    'action' => $log->action,
-                    'entite' => $log->entite_type,
+                    'id'          => $log->uuid,
+                    'action'      => $log->action,
+                    'entite'      => $log->entite_type,
                     'description' => "{$log->action} sur {$log->entite_type}",
-                    'auteur' => $log->user ? $log->user->name : 'Système',
-                    'date' => $log->created_at->diffForHumans(),
+                    'auteur'      => $log->user ? $log->user->name : 'Système',
+                    'date'        => $log->created_at?->diffForHumans(),
                 ];
             });
 
+        $dashboardData['activites_recentes'] = $activites;
+
         return response()->json([
-            'status' => 'success',
+            'status'    => 'success',
             'user_type' => 'admin',
-            'data' => [
-                'kpis' => [
-                    'total_catechumenes' => $totalCatechumenes,
-                    'total_sections' => $totalSections,
-                    'total_classes' => $totalClasses,
-                    'total_animateurs' => $totalAnimateurs,
-                    'preinscriptions_en_attente' => $preinscriptionsEnAttente,
-                ],
-                'repartition_sections' => $repartitionSections,
-                'repartition_niveaux' => $repartitionNiveaux,
-                'situation_financiere' => [
-                    'montant_attendu' => $montantAttendu,
-                    'montant_encaisse' => $montantEncaisse,
-                    'reste_a_payer' => $resteAPayer,
-                    'taux_recouvrement' => $tauxRecouvrement,
-                ],
-                'effectifs_classes' => $effectifsClasses,
-                'preparation_sacrements' => [
-                    'bapteme_candidats' => $baptemeCandidats,
-                    'premiere_communion_candidats' => $communionCandidats,
-                    'confirmation_candidats' => $confirmationCandidats,
-                ],
-                'alertes' => [
-                    'preinscriptions_non_validees' => $preinscriptionsEnAttente,
-                    'paiements_en_retard' => $paiementsEnRetard,
-                    'catechumenes_non_affectes' => $catechumenesNonAffectes,
-                    'documents_manquants' => $documentsManquants,
-                ],
-                'activites_recentes' => $activites,
-            ],
+            'data'      => new DashboardSummaryResource($dashboardData),
         ]);
     }
 
@@ -202,11 +101,15 @@ class DashboardController extends Controller
      */
     public function animateurDashboard(Request $request): JsonResponse
     {
-        $user = $request->user()->load('animateur');
-        $animateur = $user->animateur 
-            ?? Animateur::where('telephone', $user->telephone)->first() 
-            ?? Animateur::where('email', $user->email)->first()
-            ?? Animateur::first();
+        $user = $request->user();
+        if ($user instanceof Animateur) {
+            $animateur = $user;
+        } else {
+            $animateur = Animateur::where('telephone', $user->telephone)
+                ->orWhere('email', $user->email)
+                ->first()
+                ?? Animateur::first();
+        }
 
         if (!$animateur) {
             return response()->json([
@@ -215,10 +118,9 @@ class DashboardController extends Controller
                 'data'      => [
                     'animateur' => [
                         'id'        => $user->uuid,
-                        'nom'       => $user->nom,
-                        'prenoms'   => $user->prenoms,
-                        'matricule' => 'ANIM-000',
-                        'telephone' => $user->telephone,
+                        'nom'       => $user->nom ?? $user->name,
+                        'prenoms'   => $user->prenoms ?? '',
+                        'telephone' => $user->telephone ?? '',
                     ],
                     'kpis' => [
                         'total_classes'       => 0,
@@ -232,6 +134,7 @@ class DashboardController extends Controller
                 ],
             ]);
         }
+
 
         // 1. Classes affectées
         $affectations = AffectationAnimateur::with(['classe.niveau.section', 'anneeCatechese'])
@@ -251,9 +154,6 @@ class DashboardController extends Controller
                     'nom' => $aff->classe->nom,
                     'section' => $aff->classe->niveau?->section?->nom ?? 'Section',
                     'niveau' => $aff->classe->niveau?->nom ?? 'Niveau',
-                    'lieu_rassemblement' => $aff->classe->lieu_rassemblement,
-                    'jour_rencontre' => $aff->classe->jour_rencontre,
-                    'horaire' => "{$aff->classe->heure_debut} - {$aff->classe->heure_fin}",
                     'role' => $aff->role_animateur ?? 'Titulaire',
                     'effectif' => $effectif,
                 ];
@@ -300,6 +200,22 @@ class DashboardController extends Controller
         $totalFiches = $totalPresences + $totalAbsences;
         $tauxPresenceGlobal = $totalFiches > 0 ? round(($totalPresences / $totalFiches) * 100, 1) : 100;
 
+        // 5. Notifications récentes pour l'animateur
+        $notificationsRecentes = Annonce::forUser($animateur)
+            ->whereIn('statut', ['publiee', 'envoyee'])
+            ->latest('date_publication')
+            ->take(5)
+            ->get()
+            ->map(fn($a) => [
+                'id'               => $a->uuid,
+                'titre'            => $a->titre,
+                'contenu'          => $a->contenu,
+                'cible_nom'        => $a->cible_nom,
+                'date_publication' => $a->date_publication?->toDateString() ?? $a->date_diffusion?->toDateString(),
+                'priorite'         => $a->priorite ?? 'normale',
+                'est_lu'           => $a->estLuePar($animateur),
+            ]);
+
         return response()->json([
             'status' => 'success',
             'user_type' => 'animateur',
@@ -308,7 +224,6 @@ class DashboardController extends Controller
                     'id' => $animateur->uuid,
                     'nom' => $animateur->nom,
                     'prenoms' => $animateur->prenoms,
-                    'matricule' => $animateur->matricule,
                     'telephone' => $animateur->telephone,
                 ],
                 'kpis' => [
@@ -328,6 +243,7 @@ class DashboardController extends Controller
                     'lieu' => $prochaineSeance->lieu,
                 ] : null,
                 'evaluations_a_saisir' => $evaluationsSaisir,
+                'notifications_recentes' => $notificationsRecentes,
             ],
         ]);
     }
@@ -339,7 +255,7 @@ class DashboardController extends Controller
     {
         $user = $request->user()->load('catechumene');
         $catechumene = $user->catechumene
-            ?? Catechumene::where('code_catechumene', $user->username)
+            ?? Catechumene::where('matricule', $user->username)
                 ->orWhere('telephone_tuteur', $user->telephone)
                 ->first();
 
@@ -402,7 +318,7 @@ class DashboardController extends Controller
                     'date_seance' => $seance->date_seance?->toDateString(),
                     'heure_debut' => $seance->heure_debut,
                     'heure_fin' => $seance->heure_fin,
-                    'lieu' => $seance->lieu ?? $inscription->classe?->lieu_rassemblement,
+                    'lieu' => $seance->lieu ?? 'Paroisse',
                 ];
             }
         }
@@ -411,13 +327,30 @@ class DashboardController extends Controller
         $montantTotalPaiements = (float) Paiement::where('catechumene_id', $catechumene->id)->where('statut', 'valide')->sum('montant_total');
         $estRegle = $inscription ? $inscription->frais_inscription_payes : false;
 
+        // 6. Notifications récentes pour le parent
+        $notificationsRecentes = Annonce::forUser($catechumene)
+            ->whereIn('statut', ['publiee', 'envoyee'])
+            ->latest('date_publication')
+            ->take(5)
+            ->get()
+            ->map(fn($a) => [
+                'id'               => $a->uuid,
+                'titre'            => $a->titre,
+                'contenu'          => $a->contenu,
+                'cible_nom'        => $a->cible_nom,
+                'date_publication' => $a->date_publication?->toDateString() ?? $a->date_diffusion?->toDateString(),
+                'priorite'         => $a->priorite ?? 'normale',
+                'est_lu'           => $a->estLuePar($catechumene),
+            ]);
+
         return response()->json([
             'status' => 'success',
             'user_type' => 'parent',
             'data' => [
                 'enfant' => [
                     'id' => $catechumene->uuid,
-                    'code_catechumene' => $catechumene->code_catechumene,
+                    'matricule' => $catechumene->matricule,
+                    'code_catechumene' => $catechumene->matricule,
                     'nom' => $catechumene->nom,
                     'prenoms' => $catechumene->prenoms,
                     'sexe' => $catechumene->sexe,
@@ -450,6 +383,7 @@ class DashboardController extends Controller
                     'montant_paye' => $montantTotalPaiements,
                 ],
                 'prochaine_seance' => $prochaineSeance,
+                'notifications_recentes' => $notificationsRecentes,
             ],
         ]);
     }
@@ -459,20 +393,21 @@ class DashboardController extends Controller
      */
     public function superAdminDashboard(Request $request): JsonResponse
     {
-        $totalParoisses = \App\Models\ParoisseConfiguration::count();
-        $totalParoissesActives = \App\Models\ParoisseConfiguration::where('statut', 'actif')->count();
+        $totalParoisses = \App\Models\CatecheseConfiguration::count();
+        $totalParoissesActives = \App\Models\CatecheseConfiguration::where('statut', 'actif')->count();
         $totalCatechumenesGlobal = Catechumene::count();
         $totalAnimateursGlobal = Animateur::count();
         $totalUsersGlobal = User::count();
         $volumeFinancierGlobal = (float) Paiement::where('statut', 'valide')->sum('montant_total');
 
-        $paroissesList = \App\Models\ParoisseConfiguration::withCount(['catechumenes', 'classes', 'users'])
+        $paroissesList = \App\Models\CatecheseConfiguration::withCount(['catechumenes', 'classes', 'users'])
             ->latest()
             ->get()
             ->map(function ($p) {
                 return [
                     'id' => $p->uuid,
-                    'nom' => $p->nom,
+                    'nom_paroisse' => $p->nom_paroisse,
+                    'nom' => $p->nom_paroisse,
                     'code_paroisse' => $p->code_paroisse,
                     'diocese' => $p->diocese,
                     'ville' => $p->ville,
@@ -522,10 +457,62 @@ class DashboardController extends Controller
     }
 
     /**
-     * Situation financière.
+     * Situation financière (Module Trésorerie / Finances).
      */
     public function finances(Request $request): JsonResponse
     {
-        return $this->summary($request);
+        $paroisseId = $request->user()->paroisse_configuration_id ?? 1;
+        $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
+
+        $financesData = $this->dashboardService->getFinancesDashboardData($paroisseId, $annee);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $financesData,
+        ]);
+    }
+
+    /**
+     * Bilan Annuel de Catéchèse d'une année spécifique.
+     */
+    public function bilanAnnuel(Request $request, ?string $anneeCatecheseId = null): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id ?? 1;
+
+        // Résolution de l'année demandée via paramètre d'URL, query param ou en-tête
+        $anneeParam = $anneeCatecheseId ?? $request->query('annee_catechese_id') ?? $request->header('X-Annee-Id');
+
+        $annee = null;
+        if ($anneeParam) {
+            $annee = is_numeric($anneeParam)
+                ? AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('id', $anneeParam)->first()
+                : AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->where('uuid', $anneeParam)->first();
+        }
+
+        if (!$annee) {
+            $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
+        }
+
+        if (!$annee) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Aucune année de catéchèse trouvée pour cette paroisse.',
+            ], 404);
+        }
+
+        // Vérification stricte d'isolation multi-tenant
+        if ($annee->paroisse_configuration_id !== $paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Accès refusé : cette année n\'appartient pas à votre paroisse.',
+            ], 403);
+        }
+
+        $bilanData = app(\App\Services\BilanAnnuelService::class)->genererBilanAnnuel($paroisseId, $annee);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => new \App\Http\Resources\Api\V1\BilanAnnuelResource($bilanData),
+        ]);
     }
 }

@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('versements_cure', function (Blueprint $table) {
+        Schema::create('versements', function (Blueprint $table) {
             $table->id();
             $table->uuid('uuid')->unique();
             $table->foreignId('paroisse_configuration_id')->constrained('paroisse_configurations')->cascadeOnDelete();
@@ -17,18 +17,19 @@ return new class extends Migration
             $table->string('reference'); // VRS-2026-001
             $table->string('periode_concernee'); // ex: Juin 2026
             $table->decimal('montant_verse', 12, 2);
-            $table->enum('mode_remise', ['cheque', 'especes', 'virement'])->default('especes');
+            $table->string('mode_remise')->default('especes');
             $table->string('effectue_par')->nullable();
-            $table->enum('statut', ['valide', 'en_attente', 'annule'])->default('valide');
+            $table->string('destinataire')->nullable();
+            $table->string('statut')->default('valide');
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index(['paroisse_configuration_id', 'statut'], 'versements_cure_paroisse_statut_idx');
+            $table->index(['paroisse_configuration_id', 'statut'], 'versements_paroisse_statut_idx');
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('versements_cure');
+        Schema::dropIfExists('versements');
     }
 };

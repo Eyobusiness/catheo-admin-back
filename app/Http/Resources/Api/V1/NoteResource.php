@@ -15,14 +15,21 @@ class NoteResource extends JsonResource
         $appreciation = $this->appreciation ?: Evaluation::calculateAppreciation($noteObtenue, $noteMax);
 
         return [
-            'id' => $this->uuid,
-            'catechumene_id' => $this->catechumene?->uuid,
-            'code_catechumene' => $this->catechumene?->code_catechumene,
-            'nom_prenoms' => $this->catechumene ? trim("{$this->catechumene->nom} {$this->catechumene->prenoms}") : null,
-            'note_obtenue' => $noteObtenue,
-            'appreciation' => $appreciation,
-            'catechumene' => new CatechumeneResource($this->whenLoaded('catechumene')),
-            'created_at' => $this->created_at?->toIso8601String(),
+            'id'               => $this->uuid,
+            'catechumene_id'   => $this->catechumene?->uuid,
+            'catechumeneId'    => $this->catechumene?->uuid,
+            'evaluation_id'    => $this->evaluation?->uuid,
+            'evaluationId'     => $this->evaluation?->uuid,
+            'matricule'        => $this->catechumene?->matricule,
+            'code_catechumene' => $this->catechumene?->matricule,
+            'nom_prenoms'      => $this->catechumene ? trim("{$this->catechumene->nom} {$this->catechumene->prenoms}") : null,
+            'nomPrenoms'       => $this->catechumene ? trim("{$this->catechumene->nom} {$this->catechumene->prenoms}") : null,
+            'note_obtenue'     => $noteObtenue,
+            'note'             => $noteObtenue,
+            'appreciation'     => $appreciation,
+            'catechumene'      => new CatechumeneResource($this->whenLoaded('catechumene')),
+            'created_at'       => $this->created_at?->toIso8601String(),
+            'updated_at'       => $this->updated_at?->toIso8601String(),
         ];
     }
 }

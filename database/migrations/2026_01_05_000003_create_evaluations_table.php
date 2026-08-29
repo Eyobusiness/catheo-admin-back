@@ -13,8 +13,8 @@ return new class extends Migration
             $table->uuid('uuid')->unique();
             $table->foreignId('paroisse_configuration_id')->constrained('paroisse_configurations')->cascadeOnDelete();
             $table->foreignId('annee_catechese_id')->constrained('annee_catecheses')->cascadeOnDelete();
-            $table->foreignId('module_trimestriel_id')->constrained('modules_trimestriels')->cascadeOnDelete();
-            $table->foreignId('classe_id')->constrained('classes')->cascadeOnDelete();
+            $table->foreignId('module_trimestriel_id')->nullable()->constrained('modules_trimestriels')->nullOnDelete();
+            $table->foreignId('classe_id')->nullable()->constrained('classes')->nullOnDelete();
             $table->string('titre');
             $table->text('description')->nullable();
             $table->string('type_eval')->default('interrogation'); // interrogation, composition, examen, oral, devoir, comportement

@@ -20,24 +20,16 @@ class ClasseController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Classe::with(['anneeCatechese', 'niveau.section'])
             ->withCount('inscriptionsAnnuelles')
             ->where('paroisse_configuration_id', $paroisseId);
 
-        if ($request->filled('annee_catechese_id')) {
-            $anneeId = AnneeCatechese::where('uuid', $request->annee_catechese_id)->value('id');
-            if ($anneeId) {
-                $query->where('annee_catechese_id', $anneeId);
-            }
-        } else {
-            // Par défaut, si l'année n'est pas spécifiée, afficher l'année active de la paroisse
-            $anneeActiveId = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
-                ->where('est_active', true)
-                ->value('id');
-            if ($anneeActiveId) {
-                $query->where('annee_catechese_id', $anneeActiveId);
+        if ($request->input('annee_catechese_id') !== 'all') {
+            $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
+            if ($annee) {
+                $query->where('annee_catechese_id', $annee->id);
             }
         }
 
@@ -69,7 +61,7 @@ class ClasseController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'niveau_id'          => ['required', 'string', 'exists:niveaux,uuid'],
@@ -81,17 +73,13 @@ class ClasseController extends Controller
 
         $niveau = Niveau::where('uuid', $validated['niveau_id'])->firstOrFail();
 
-        // Récupération de l'année pastorale fournie ou active
+        // Récupération de l'année pastorale fournie ou active/en cours
         if (!empty($validated['annee_catechese_id'])) {
             $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->firstOrFail();
             $anneeId = $annee->id;
         } else {
-            $anneeId = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
-                ->where('est_active', true)
-                ->value('id');
-            if (!$anneeId) {
-                $anneeId = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)->latest()->value('id');
-            }
+            $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
+            $anneeId = $annee?->id;
         }
 
         $classe = Classe::create([
@@ -177,11 +165,36 @@ class ClasseController extends Controller
     }
 
     /**
+     * Basculer le statut d'une classe (Action Toggle 🔘 Active <-> Inactive).
+     */
+    public function toggleStatus(Request $request, Classe $classe): JsonResponse
+    {
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $classe->paroisse_configuration_id);
+
+        $nouveauStatut = ($classe->statut === 'active') ? 'inactive' : 'active';
+        $classe->update(['statut' => $nouveauStatut]);
+        $classe->load(['anneeCatechese', 'niveau.section'])->loadCount('inscriptionsAnnuelles');
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Le statut de la classe '{$classe->nom}' est désormais " . ucfirst($nouveauStatut) . ".",
+            'data'    => new ClasseResource($classe),
+        ]);
+    }
+
+    /**
      * Suppression d'une classe.
      */
     public function destroy(Request $request, Classe $classe): JsonResponse
     {
         $this->authorizeTenant($request->user()->paroisse_configuration_id, $classe->paroisse_configuration_id);
+
+        if ($classe->inscriptionsAnnuelles()->count() > 0) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Impossible de supprimer une classe contenant des inscriptions rattachées.',
+            ], 422);
+        }
 
         $classe->delete();
 

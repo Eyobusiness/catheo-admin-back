@@ -11,9 +11,9 @@ use App\Models\Evaluation;
 use App\Models\InscriptionAnnuelle;
 use App\Models\ModuleTrimestriel;
 use App\Models\Niveau;
-use App\Models\ParoisseConfiguration;
+use App\Models\CatecheseConfiguration;
 use App\Models\Profil;
-use App\Models\ResponsableParoisse;
+use App\Models\ResponsableCatechese;
 use App\Models\Section;
 use App\Models\Tarif;
 use App\Models\User;
@@ -41,10 +41,10 @@ class InitialSetupSeeder extends Seeder
         $profilLecteur = $profils->get('LECTEUR');
 
         // 2. Paroisse de Démonstration Principale
-        $paroisse = ParoisseConfiguration::firstOrCreate(
+        $paroisse = CatecheseConfiguration::firstOrCreate(
             ['code_paroisse' => 'PAR-STPAUL-01'],
             [
-                'nom'              => 'Paroisse Cathédrale Saint-Paul',
+                'nom_paroisse'     => 'Paroisse Cathédrale Saint-Paul',
                 'code_paroisse'    => 'PAR-STPAUL-01',
                 'diocese'          => 'Archidiocèse d\'Abidjan',
                 'doyenne'          => 'Doyenne Monseigneur Laurent Yapi',
@@ -60,28 +60,24 @@ class InitialSetupSeeder extends Seeder
             ]
         );
 
-        // 3. Responsables Paroissiaux
-        ResponsableParoisse::firstOrCreate(
+        // 3. Responsables de la Catéchèse
+        ResponsableCatechese::firstOrCreate(
             ['nom_prenoms' => 'Père Jean-Baptiste AKRE'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
-                'titre'                     => 'Père',
                 'fonction'                  => 'Curé de la Paroisse',
                 'telephone'                 => '+225 0701020304',
-                'email'                     => 'cure@saintpaul-plateau.ci',
-                'ordre_affichage'           => 1,
+                'statut'                    => 'actif',
             ]
         );
 
-        ResponsableParoisse::firstOrCreate(
+        ResponsableCatechese::firstOrCreate(
             ['nom_prenoms' => 'Père Marc KOFFI'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
-                'titre'                     => 'Père',
                 'fonction'                  => 'Vicaire Paroissial & Aumônier Catéchèse',
                 'telephone'                 => '+225 0702030405',
-                'email'                     => 'vicaire@saintpaul-plateau.ci',
-                'ordre_affichage'           => 2,
+                'statut'                    => 'actif',
             ]
         );
 
@@ -205,7 +201,6 @@ class InitialSetupSeeder extends Seeder
                 'paroisse_configuration_id' => $paroisse->id,
                 'date_debut'                => '2024-09-15',
                 'date_fin'                  => '2025-06-30',
-                'est_active'                => true,
                 'statut'                    => 'active',
             ]
         );
@@ -244,36 +239,36 @@ class InitialSetupSeeder extends Seeder
         );
 
         $niv1 = Niveau::firstOrCreate(
-            ['code' => 'INIT_1'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
                 'section_id'                => $secEnfants->id,
                 'nom'                       => '1ère Année d\'Initiation (Éveil à la Foi)',
-                'duree_annees'              => 1,
+            ],
+            [
                 'ordre_affichage'           => 1,
                 'statut'                    => 'actif',
             ]
         );
 
         $niv2 = Niveau::firstOrCreate(
-            ['code' => 'INIT_2'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
                 'section_id'                => $secEnfants->id,
                 'nom'                       => '2ème Année (Première Communion)',
-                'duree_annees'              => 1,
+            ],
+            [
                 'ordre_affichage'           => 2,
                 'statut'                    => 'actif',
             ]
         );
 
         $nivConf = Niveau::firstOrCreate(
-            ['code' => 'CONF_1'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
                 'section_id'                => $secJeunes->id,
                 'nom'                       => 'Confirmation - 1ère Année',
-                'duree_annees'              => 1,
+            ],
+            [
                 'ordre_affichage'           => 3,
                 'statut'                    => 'actif',
             ]
@@ -340,50 +335,49 @@ class InitialSetupSeeder extends Seeder
 
         // Classes de base
         $classeBase = Classe::firstOrCreate(
-            ['code' => 'CLS-STJO-A'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
                 'annee_catechese_id'        => $anneePastoral->id,
                 'niveau_id'                 => $niv1->id,
                 'nom'                       => 'Initiation 1 - Groupe Saint-Joseph',
-                'statut'                    => 'actif',
+            ],
+            [
+                'statut'                    => 'active',
                 'capacite_max'              => 35,
             ]
         );
 
         Classe::firstOrCreate(
-            ['code' => 'INIT1-SJ'],
             [
                 'paroisse_configuration_id' => $paroisse->id,
                 'annee_catechese_id'        => $anneePastoral->id,
                 'niveau_id'                 => $niv1->id,
                 'nom'                       => 'Initiation 1 - Saint-Joseph (B)',
-                'statut'                    => 'actif',
+            ],
+            [
+                'statut'                    => 'active',
                 'capacite_max'              => 35,
             ]
         );
 
         // Animateur lié
-        $userAnim = User::where('email', 'animateur1@catheo.ci')->first();
-        if ($userAnim) {
-            Animateur::firstOrCreate(
-                ['telephone' => '+225 0700000004'],
-                [
-                    'paroisse_configuration_id' => $paroisse->id,
-                    'user_id'                  => $userAnim->id,
-                    'nom'                      => 'KONE',
-                    'prenoms'                  => 'Marc',
-                    'email'                    => 'animateur1@catheo.ci',
-                    'statut'                   => 'actif',
-                ]
-            );
-        }
+        Animateur::firstOrCreate(
+            ['telephone' => '+225 0700000004'],
+            [
+                'paroisse_configuration_id' => $paroisse->id,
+                'nom'                      => 'KONE',
+                'prenoms'                  => 'Marc',
+                'email'                    => 'animateur1@catheo.ci',
+                'password'                 => Hash::make('12345678'),
+                'statut'                   => 'actif',
+            ]
+        );
 
         // Catéchumène et Parent de base
         $userParent = User::where('email', 'parent@catheo.ci')->first();
         if ($userParent) {
             $catBase = Catechumene::firstOrCreate(
-                ['code_catechumene' => 'CAT-2024-DEMO-01'],
+                ['matricule' => 'CAT-2024-DEMO-01'],
                 [
                     'paroisse_configuration_id' => $paroisse->id,
                     'user_id'                  => $userParent->id,
@@ -398,8 +392,10 @@ class InitialSetupSeeder extends Seeder
                     'date_bapteme'             => '2016-01-10',
                     'paroisse_bapteme'         => 'Paroisse Saint-Augustin',
                     'statut'                   => 'actif',
+                    'password'                 => '12345678',
                 ]
             );
+
 
             InscriptionAnnuelle::firstOrCreate(
                 [
@@ -416,5 +412,8 @@ class InitialSetupSeeder extends Seeder
                 ]
             );
         }
+
+        // 10. Modèles de Documents Officiels
+        $this->call(DocumentModeleSeeder::class);
     }
 }

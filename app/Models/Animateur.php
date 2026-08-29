@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,15 +16,13 @@ use Laravel\Sanctum\HasApiTokens;
 
 class Animateur extends Authenticatable
 {
-    use HasApiTokens, HasAuditFields, HasFactory, HasUuid, Notifiable, SoftDeletes;
+    use Auditable, HasApiTokens, HasAuditFields, HasFactory, HasUuid, Notifiable, SoftDeletes;
 
     protected $table = 'animateurs';
 
     protected $fillable = [
         'uuid',
         'paroisse_configuration_id',
-        'user_id',
-        'matricule',
         'nom',
         'prenoms',
         'sexe',
@@ -49,12 +49,7 @@ class Animateur extends Authenticatable
 
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
-    }
-
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function affectations(): HasMany
@@ -110,4 +105,11 @@ class Animateur extends Authenticatable
             ],
         ];
     }
+
+    public function hasPermission(string $permission): bool
+    {
+        return true;
+    }
 }
+
+

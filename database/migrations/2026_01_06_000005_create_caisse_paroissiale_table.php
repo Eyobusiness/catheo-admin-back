@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('paroisse_configuration_id')->constrained('paroisse_configurations')->cascadeOnDelete();
             $table->foreignId('annee_catechese_id')->constrained('annee_catecheses')->cascadeOnDelete();
             $table->enum('type_mouvement', ['entree', 'sortie', 'recette', 'depense', 'remboursement']);
-            $table->enum('categorie', ['inscription', 'don', 'cotisation', 'depense_fournitures', 'depense_evenement', 'remboursement', 'autre'])->default('inscription');
+            $table->string('categorie')->default('inscription');
             $table->decimal('montant', 12, 2);
             $table->string('reference_document')->nullable();
             $table->string('libelle');

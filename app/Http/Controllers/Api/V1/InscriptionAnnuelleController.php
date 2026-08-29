@@ -11,7 +11,9 @@ use App\Models\Catechumene;
 use App\Models\InscriptionAnnuelle;
 use App\Models\Mouvement;
 use App\Models\Niveau;
+use App\Models\OperationPaiement;
 use App\Models\Section;
+use App\Models\Tarif;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -22,44 +24,117 @@ class InscriptionAnnuelleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::value('id');
 
-        $query = InscriptionAnnuelle::with(['catechumene', 'anneeCatechese', 'section', 'niveau', 'classe', 'ceb', 'mouvement'])
-            ->where('paroisse_configuration_id', $paroisseId);
+        $query = InscriptionAnnuelle::with(['catechumene', 'anneeCatechese', 'section', 'niveau.section', 'classe', 'ceb', 'mouvement']);
 
-        if ($request->filled('annee_catechese_id')) {
-            $anneeId = AnneeCatechese::where('uuid', $request->annee_catechese_id)->value('id');
+        if ($paroisseId) {
+            $query->where(function ($q) use ($paroisseId) {
+                $q->where('paroisse_configuration_id', $paroisseId)
+                  ->orWhereNull('paroisse_configuration_id');
+            });
+        }
+
+        if ($request->filled('annee_catechese_id') && !in_array(strtolower($request->annee_catechese_id), ['all', 'tous', 'undefined', 'null'])) {
+            $val = $request->annee_catechese_id;
+            $anneeId = is_numeric($val) ? (int) $val : AnneeCatechese::where('uuid', $val)->value('id');
             if ($anneeId) {
                 $query->where('annee_catechese_id', $anneeId);
             }
         }
 
-        if ($request->filled('section_id')) {
-            $sectionId = Section::where('uuid', $request->section_id)->value('id');
+        if ($request->filled('section_id') && !in_array(strtolower($request->section_id), ['all', 'tous', 'undefined', 'null'])) {
+            $val = $request->section_id;
+            $sectionId = is_numeric($val) ? (int) $val : Section::where('uuid', $val)->value('id');
             if ($sectionId) {
                 $query->where('section_id', $sectionId);
             }
         }
 
-        if ($request->filled('niveau_id')) {
-            $niveauId = Niveau::where('uuid', $request->niveau_id)->value('id');
+        if ($request->filled('niveau_id') && !in_array(strtolower($request->niveau_id), ['all', 'tous', 'undefined', 'null'])) {
+            $val = $request->niveau_id;
+            $niveauId = is_numeric($val) ? (int) $val : Niveau::where('uuid', $val)->value('id');
             if ($niveauId) {
                 $query->where('niveau_id', $niveauId);
             }
         }
 
-        if ($request->filled('classe_id')) {
-            $classeId = Classe::where('uuid', $request->classe_id)->value('id');
+        if ($request->filled('classe_id') && !in_array(strtolower($request->classe_id), ['all', 'tous', 'undefined', 'null'])) {
+            $val = $request->classe_id;
+            $classeId = is_numeric($val) ? (int) $val : Classe::where('uuid', $val)->value('id');
             if ($classeId) {
                 $query->where('classe_id', $classeId);
             }
         }
 
-        if ($request->filled('statut_inscription')) {
-            $query->where('statut_inscription', $request->statut_inscription);
+        if ($request->filled('ceb_id') && !in_array(strtolower($request->ceb_id), ['all', 'tous', 'undefined', 'null'])) {
+            $val = $request->ceb_id;
+            $cebId = is_numeric($val) ? (int) $val : Ceb::where('uuid', $val)->value('id');
+            if ($cebId) {
+                $query->where('ceb_id', $cebId);
+            }
         }
 
-        $inscriptions = $query->latest()->paginate($request->get('per_page', 20));
+        if ($request->filled('statut_inscription') && !in_array(strtolower($request->statut_inscription), ['all', 'tous', 'undefined', 'null'])) {
+            $query->where('statut_inscription', $request->statut_inscription);
+        } elseif ($request->filled('statut') && !in_array(strtolower($request->statut), ['all', 'tous', 'undefined', 'null'])) {
+            $query->where('statut_inscription', $request->statut);
+        }
+
+        if ($request->filled('frais_payes')) {
+            $query->where('frais_inscription_payes', filter_var($request->frais_payes, FILTER_VALIDATE_BOOLEAN));
+        }
+
+        $search = $request->input('search')
+            ?? $request->input('q')
+            ?? $request->input('query')
+            ?? $request->input('terme')
+            ?? $request->input('term');
+
+        if (!empty($search)) {
+            $search = trim($search);
+            $isSqlite = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'sqlite';
+            $concat1 = $isSqlite ? "(nom || ' ' || prenoms)" : "CONCAT(nom, ' ', prenoms)";
+            $concat2 = $isSqlite ? "(prenoms || ' ' || nom)" : "CONCAT(prenoms, ' ', nom)";
+
+            $query->where(function ($q) use ($search, $concat1, $concat2) {
+                $q->where('code_inscription', 'like', "%{$search}%")
+                  ->orWhere('uuid', $search)
+                  ->orWhereHas('catechumene', function ($cq) use ($search, $concat1, $concat2) {
+                      $cq->where('nom', 'like', "%{$search}%")
+                         ->orWhere('prenoms', 'like', "%{$search}%")
+                         ->orWhere('matricule', 'like', "%{$search}%")
+                         ->orWhere('uuid', $search)
+                         ->orWhere('telephone', 'like', "%{$search}%")
+                         ->orWhereRaw("{$concat1} LIKE ?", ["%{$search}%"])
+                         ->orWhereRaw("{$concat2} LIKE ?", ["%{$search}%"]);
+
+                      $words = preg_split('/\s+/', $search);
+                      if (count($words) > 1) {
+                          $cq->orWhere(function ($subQ) use ($words) {
+                              foreach ($words as $word) {
+                                  $subQ->where(function ($wQ) use ($word) {
+                                      $wQ->where('nom', 'like', "%{$word}%")
+                                         ->orWhere('prenoms', 'like', "%{$word}%")
+                                         ->orWhere('matricule', 'like', "%{$word}%");
+                                  });
+                              }
+                          });
+                      }
+                  });
+            });
+        }
+
+        if ($request->boolean('all') || $request->get('per_page') === 'all') {
+            $items = $query->latest()->get();
+            return response()->json([
+                'status' => 'success',
+                'data'   => InscriptionAnnuelleResource::collection($items),
+            ]);
+        }
+
+        $perPage = (int) $request->get('per_page', 20);
+        $inscriptions = $query->latest()->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
@@ -132,6 +207,38 @@ class InscriptionAnnuelleController extends Controller
         $inscription = InscriptionAnnuelle::create($validated);
         $inscription->load(['catechumene', 'anneeCatechese', 'section', 'niveau', 'classe', 'ceb', 'mouvement']);
 
+        // Déclencher une opération de paiement en attente dans la finance si non payé
+        if (!$inscription->frais_inscription_payes) {
+            $tarif = Tarif::where('paroisse_configuration_id', $paroisseId)
+                ->where('type_tarif', 'inscription')
+                ->where(function ($q) use ($niveau) {
+                    $q->where('niveau_id', $niveau->id)
+                      ->orWhereNull('niveau_id');
+                })
+                ->first();
+
+            $montant = $tarif ? (float) $tarif->montant : 15000;
+            $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', OperationPaiement::where('paroisse_configuration_id', $paroisseId)->count() + 1);
+
+            OperationPaiement::firstOrCreate(
+                [
+                    'paroisse_configuration_id' => $paroisseId,
+                    'catechumene_id'            => $catechumene->id,
+                    'annee_catechese_id'        => $annee->id,
+                    'statut'                    => 'en_attente',
+                ],
+                [
+                    'tarif_id'     => $tarif?->id,
+                    'reference'    => $reference,
+                    'libelle'      => "Frais d'inscription - {$catechumene->nom_complet} ({$niveau->nom})",
+                    'montant'      => $montant,
+                    'montant_paye' => 0,
+                    'echeance'     => now()->addMonths(1)->toDateString(),
+                    'statut'       => 'en_attente',
+                ]
+            );
+        }
+
         return response()->json([
             'status'  => 'success',
             'message' => 'Catéchumène inscrit pour l\'année pastorale avec succès.',
@@ -140,88 +247,241 @@ class InscriptionAnnuelleController extends Controller
     }
 
     /**
+     * Résout une instance d'InscriptionAnnuelle par UUID, ID ou relations.
+     */
+    private function resolveInscription(mixed $inscription): InscriptionAnnuelle
+    {
+        if ($inscription instanceof InscriptionAnnuelle) {
+            return $inscription;
+        }
+
+        $item = is_numeric($inscription)
+            ? InscriptionAnnuelle::find((int) $inscription)
+            : InscriptionAnnuelle::where('uuid', $inscription)->first();
+
+        if (!$item) {
+            $item = InscriptionAnnuelle::where('code_inscription', $inscription)
+                ->orWhereHas('catechumene', function ($q) use ($inscription) {
+                    $q->where('uuid', $inscription)->orWhere('matricule', $inscription);
+                })
+                ->first();
+        }
+
+        if (!$item) {
+            abort(response()->json([
+                'status'  => 'error',
+                'message' => 'Inscription annuelle introuvable.',
+            ], 404));
+        }
+
+        return $item;
+    }
+
+    /**
      * Détails d'une inscription.
      */
-    public function show(Request $request, InscriptionAnnuelle $inscription): JsonResponse
+    public function show(Request $request, mixed $inscription): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $inscription->paroisse_configuration_id);
+        $item = $this->resolveInscription($inscription);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $item->paroisse_configuration_id);
 
-        $inscription->load(['catechumene', 'anneeCatechese', 'section', 'niveau', 'classe', 'ceb', 'mouvement']);
+        $item->load(['catechumene', 'anneeCatechese', 'section', 'niveau.section', 'classe', 'ceb', 'mouvement']);
 
         return response()->json([
             'status' => 'success',
-            'data'   => new InscriptionAnnuelleResource($inscription),
+            'data'   => new InscriptionAnnuelleResource($item),
         ]);
     }
 
     /**
-     * Mettre à jour une inscription (ex: réaffecter de classe, section, valider le paiement).
+     * Mettre à jour une inscription / affectation (ex: classe, section, niveau, paiement).
      */
-    public function update(Request $request, InscriptionAnnuelle $inscription): JsonResponse
+    public function update(Request $request, mixed $inscription): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $inscription->paroisse_configuration_id);
+        $item = $this->resolveInscription($inscription);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $item->paroisse_configuration_id);
 
         $validated = $request->validate([
-            'section_id'              => ['sometimes', 'nullable', 'string', 'exists:sections,uuid'],
-            'niveau_id'               => ['sometimes', 'required', 'string', 'exists:niveaux,uuid'],
-            'classe_id'               => ['nullable', 'string', 'exists:classes,uuid'],
-            'ceb_id'                  => ['nullable', 'string', 'exists:cebs,uuid'],
-            'mouvement_id'            => ['nullable', 'string', 'exists:mouvements,uuid'],
-            'statut_inscription'      => ['nullable', 'string', 'in:inscrit,valide,en_attente,abandon'],
+            'section_id'              => ['nullable', 'string'],
+            'niveau_id'               => ['nullable', 'string'],
+            'classe_id'               => ['nullable', 'string'],
+            'ceb_id'                  => ['nullable', 'string'],
+            'mouvement_id'            => ['nullable', 'string'],
+            'statut_inscription'      => ['nullable', 'string'],
+            'statut'                  => ['nullable', 'string'],
             'frais_inscription_payes' => ['nullable', 'boolean'],
+            'frais_payes'             => ['nullable', 'boolean'],
             'observation'             => ['nullable', 'string'],
         ]);
 
-        if (!empty($validated['niveau_id'])) {
-            $niveau = Niveau::where('uuid', $validated['niveau_id'])->firstOrFail();
-            $validated['niveau_id'] = $niveau->id;
-            if (empty($validated['section_id'])) {
-                $validated['section_id'] = $niveau->section_id;
+        // Résolution de la classe
+        if (array_key_exists('classe_id', $validated)) {
+            $cVal = $validated['classe_id'];
+            if (!empty($cVal)) {
+                $classe = is_numeric($cVal) ? Classe::with('niveau')->find($cVal) : Classe::with('niveau')->where('uuid', $cVal)->first();
+                if ($classe) {
+                    $validated['classe_id'] = $classe->id;
+                    // Auto-dériver le niveau et la section depuis la classe si non fournis
+                    if (empty($validated['niveau_id'])) {
+                        $validated['niveau_id'] = $classe->niveau_id;
+                    }
+                    if (empty($validated['section_id']) && $classe->niveau) {
+                        $validated['section_id'] = $classe->niveau->section_id;
+                    }
+                } else {
+                    $validated['classe_id'] = null;
+                }
+            } else {
+                $validated['classe_id'] = null;
             }
         }
 
+        // Résolution du niveau
+        if (array_key_exists('niveau_id', $validated) && !empty($validated['niveau_id'])) {
+            $nVal = $validated['niveau_id'];
+            $niveau = is_numeric($nVal) ? Niveau::find($nVal) : Niveau::where('uuid', $nVal)->first();
+            if ($niveau) {
+                $validated['niveau_id'] = $niveau->id;
+                if (empty($validated['section_id'])) {
+                    $validated['section_id'] = $niveau->section_id;
+                }
+            }
+        }
+
+        // Résolution de la section
         if (array_key_exists('section_id', $validated)) {
-            $validated['section_id'] = $validated['section_id']
-                ? Section::where('uuid', $validated['section_id'])->value('id')
+            $sVal = $validated['section_id'];
+            $validated['section_id'] = !empty($sVal)
+                ? (is_numeric($sVal) ? (int) $sVal : Section::where('uuid', $sVal)->value('id'))
                 : null;
         }
 
-        if (array_key_exists('classe_id', $validated)) {
-            $validated['classe_id'] = $validated['classe_id']
-                ? Classe::where('uuid', $validated['classe_id'])->value('id')
-                : null;
-        }
-
+        // Résolution du CEB
         if (array_key_exists('ceb_id', $validated)) {
-            $validated['ceb_id'] = $validated['ceb_id']
-                ? Ceb::where('uuid', $validated['ceb_id'])->value('id')
+            $cebVal = $validated['ceb_id'];
+            $validated['ceb_id'] = !empty($cebVal)
+                ? (is_numeric($cebVal) ? (int) $cebVal : Ceb::where('uuid', $cebVal)->value('id'))
                 : null;
         }
 
+        // Résolution du Mouvement
         if (array_key_exists('mouvement_id', $validated)) {
-            $validated['mouvement_id'] = $validated['mouvement_id']
-                ? Mouvement::where('uuid', $validated['mouvement_id'])->value('id')
+            $mVal = $validated['mouvement_id'];
+            $validated['mouvement_id'] = !empty($mVal)
+                ? (is_numeric($mVal) ? (int) $mVal : Mouvement::where('uuid', $mVal)->value('id'))
                 : null;
         }
 
-        $inscription->update($validated);
-        $inscription->load(['catechumene', 'anneeCatechese', 'section', 'niveau', 'classe', 'ceb', 'mouvement']);
+        if (isset($validated['statut'])) {
+            $validated['statut_inscription'] = $validated['statut'];
+        }
+
+        if (isset($validated['frais_payes'])) {
+            $validated['frais_inscription_payes'] = $validated['frais_payes'];
+        }
+
+        $item->update($validated);
+        $item->load(['catechumene', 'anneeCatechese', 'section', 'niveau.section', 'classe', 'ceb', 'mouvement']);
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Inscription mise à jour avec succès.',
-            'data'    => new InscriptionAnnuelleResource($inscription),
+            'message' => 'Affectation et inscription mises à jour avec succès.',
+            'data'    => new InscriptionAnnuelleResource($item),
+        ]);
+    }
+
+    /**
+     * Affectation de catéchumène(s) à une classe (individuelle ou par lot).
+     * Route: POST /api/v1/inscriptions-annuelles/affecter
+     */
+    public function affecter(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id;
+
+        $validated = $request->validate([
+            'classe_id'         => ['required', 'string'],
+            'inscription_ids'   => ['nullable', 'array'],
+            'inscription_ids.*' => ['string'],
+            'catechumene_ids'   => ['nullable', 'array'],
+            'catechumene_ids.*' => ['string'],
+            'inscription_id'    => ['nullable', 'string'],
+            'catechumene_id'    => ['nullable', 'string'],
+        ]);
+
+        $cVal = $validated['classe_id'];
+        $classe = is_numeric($cVal)
+            ? Classe::with('niveau')->find($cVal)
+            : Classe::with('niveau')->where('uuid', $cVal)->first();
+
+        if (!$classe) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Classe introuvable.',
+            ], 404);
+        }
+
+        $updatedCount = 0;
+
+        // 1. Affectation par IDs d'inscriptions
+        $inscriptionIds = $validated['inscription_ids'] ?? [];
+        if (!empty($validated['inscription_id'])) {
+            $inscriptionIds[] = $validated['inscription_id'];
+        }
+
+        foreach ($inscriptionIds as $insId) {
+            try {
+                $ins = $this->resolveInscription($insId);
+                $ins->update([
+                    'classe_id'  => $classe->id,
+                    'niveau_id'  => $classe->niveau_id ?? $ins->niveau_id,
+                    'section_id' => $classe->niveau?->section_id ?? $ins->section_id,
+                ]);
+                $updatedCount++;
+            } catch (\Throwable $e) {
+                // Continue
+            }
+        }
+
+        // 2. Affectation par IDs de catéchumènes
+        $catIds = $validated['catechumene_ids'] ?? [];
+        if (!empty($validated['catechumene_id'])) {
+            $catIds[] = $validated['catechumene_id'];
+        }
+
+        foreach ($catIds as $cId) {
+            try {
+                $cat = is_numeric($cId) ? Catechumene::find($cId) : Catechumene::where('uuid', $cId)->first();
+                if ($cat) {
+                    $ins = InscriptionAnnuelle::where('catechumene_id', $cat->id)->latest()->first();
+                    if ($ins) {
+                        $ins->update([
+                            'classe_id'  => $classe->id,
+                            'niveau_id'  => $classe->niveau_id ?? $ins->niveau_id,
+                            'section_id' => $classe->niveau?->section_id ?? $ins->section_id,
+                        ]);
+                        $updatedCount++;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Continue
+            }
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Affectation réussie pour {$updatedCount} catéchumène(s) dans la classe '{$classe->nom}'.",
         ]);
     }
 
     /**
      * Annuler/Supprimer une inscription.
      */
-    public function destroy(Request $request, InscriptionAnnuelle $inscription): JsonResponse
+    public function destroy(Request $request, mixed $inscription): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $inscription->paroisse_configuration_id);
+        $item = $this->resolveInscription($inscription);
+        $this->authorizeTenant($request->user()->paroisse_configuration_id, $item->paroisse_configuration_id);
 
-        $inscription->delete();
+        $item->delete();
 
         return response()->json([
             'status'  => 'success',
@@ -229,9 +489,9 @@ class InscriptionAnnuelleController extends Controller
         ]);
     }
 
-    private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
+    private function authorizeTenant(?int $userParoisseId, ?int $targetParoisseId): void
     {
-        if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
+        if ($userParoisseId && $targetParoisseId && $userParoisseId !== $targetParoisseId) {
             abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
         }
     }

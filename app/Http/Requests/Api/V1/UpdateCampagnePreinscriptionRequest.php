@@ -14,13 +14,15 @@ class UpdateCampagnePreinscriptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'titre' => ['sometimes', 'required', 'string', 'max:255'],
-            'nom' => ['nullable', 'string', 'max:255'],
-            'date_debut' => ['sometimes', 'required', 'date'],
-            'date_fin' => ['sometimes', 'required', 'date', 'after_or_equal:date_debut'],
-            'sections_autorisees' => ['nullable', 'array'],
-            'statut' => ['nullable', 'string'],
-            'description' => ['nullable', 'string'],
+            'annee_catechese_id' => ['nullable', 'string'],
+            'titre'              => ['nullable', 'string', 'max:255'],
+            'nom'                => ['nullable', 'string', 'max:255'],
+            'date_debut'         => ['nullable', 'date'],
+            'date_fin'           => ['nullable', 'date'],
+            'sections_autorisees'=> ['nullable', 'array'],
+            'statut'             => ['nullable', 'string'],
+            'description'        => ['nullable', 'string'],
         ];
     }
 }
+

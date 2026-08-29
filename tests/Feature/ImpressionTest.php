@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\ParoisseConfiguration;
+use App\Models\CatecheseConfiguration;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -12,7 +12,7 @@ class ImpressionTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
-    protected ParoisseConfiguration $paroisse;
+    protected CatecheseConfiguration $paroisse;
     protected string $token;
 
     protected function setUp(): void
@@ -21,7 +21,7 @@ class ImpressionTest extends TestCase
         $this->seed(\Database\Seeders\InitialSetupSeeder::class);
 
         $this->adminUser = User::where('email', 'admin.stpaul@catheo.ci')->first();
-        $this->paroisse = ParoisseConfiguration::where('code_paroisse', 'PAR-STPAUL-01')->first();
+        $this->paroisse = CatecheseConfiguration::where('code_paroisse', 'PAR-STPAUL-01')->first();
         $this->token = $this->adminUser->createToken('TestDevice')->plainTextToken;
     }
 

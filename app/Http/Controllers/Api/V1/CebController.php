@@ -15,7 +15,7 @@ class CebController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Ceb::withCount('inscriptionsAnnuelles')
             ->where('paroisse_configuration_id', $paroisseId);
@@ -26,7 +26,8 @@ class CebController extends Controller
                 $q->where('nom', 'like', "%{$search}%")
                   ->orWhere('responsable', 'like', "%{$search}%")
                   ->orWhere('telephone', 'like', "%{$search}%")
-                  ->orWhere('adresse', 'like', "%{$search}%");
+                  ->orWhere('adresse', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -50,7 +51,7 @@ class CebController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'nom'         => ['required', 'string', 'max:150'],

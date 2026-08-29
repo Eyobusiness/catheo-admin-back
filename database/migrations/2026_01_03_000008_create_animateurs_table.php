@@ -17,16 +17,12 @@ return new class extends Migration
             $table->foreignId('paroisse_configuration_id')
                 ->constrained('paroisse_configurations')
                 ->cascadeOnDelete();
-            $table->foreignId('user_id')
-                ->nullable()
-                ->constrained('users')
-                ->nullOnDelete();
-            $table->string('matricule')->nullable();
             $table->string('nom');
             $table->string('prenoms');
             $table->string('sexe', 1)->default('M');
             $table->string('telephone')->nullable();
             $table->string('email')->nullable();
+            $table->string('password')->nullable();
             $table->string('profession')->nullable();
             $table->string('statut')->default('actif');
             $table->timestamps();

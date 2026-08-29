@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('paroisse_configuration_id')->constrained('paroisse_configurations')->cascadeOnDelete();
             $table->foreignId('ceb_id')->nullable()->constrained('cebs')->nullOnDelete();
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('code_catechumene'); // Matricule unique par paroisse
+            $table->string('matricule'); // Matricule unique par paroisse
             
             // Fiche Identité
             $table->string('nom');
@@ -57,7 +57,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->unique(['paroisse_configuration_id', 'code_catechumene'], 'catechumenes_paroisse_code_unique');
+            $table->unique(['paroisse_configuration_id', 'matricule'], 'catechumenes_paroisse_code_unique');
             $table->index(['paroisse_configuration_id', 'nom', 'prenoms'], 'catechumenes_paroisse_nom_index');
         });
     }

@@ -14,7 +14,6 @@ return new class extends Migration
             $table->foreignId('paroisse_configuration_id')->constrained('paroisse_configurations')->cascadeOnDelete();
             $table->foreignId('annee_catechese_id')->constrained('annee_catecheses')->cascadeOnDelete();
             $table->foreignId('classe_id')->constrained('classes')->cascadeOnDelete();
-            $table->foreignId('module_trimestriel_id')->nullable()->constrained('modules_trimestriels')->nullOnDelete();
             $table->string('titre');
             $table->date('date_seance');
             $table->time('heure_debut')->nullable();

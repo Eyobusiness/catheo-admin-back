@@ -14,21 +14,26 @@ class StorePreinscriptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'campagne_id'            => ['required', 'string', 'exists:campagnes_preinscriptions,uuid'],
-            'section_souhaite_id'    => ['nullable', 'string', 'exists:sections,uuid'],
-            'niveau_souhaite_id'     => ['nullable', 'string', 'exists:niveaux,uuid'],
-            'type_demande'           => ['nullable', 'string', 'in:nouvelle_inscription,reinscription,premiere_inscription'],
+            'campagne_id'               => ['nullable'],
+            'campagne_preinscription_id'=> ['nullable'],
+            'annee_catechese_id'        => ['nullable'],
+            'section_souhaite_id'       => ['nullable'],
+            'section_id'                => ['nullable'],
+            'niveau_souhaite_id'        => ['nullable'],
+            'niveau_id'                 => ['nullable'],
+            'type_demande'              => ['nullable', 'string', 'in:nouvelle_inscription,reinscription,premiere_inscription'],
             
             // Fiche Identité
-            'nom'                    => ['required', 'string', 'max:255'],
-            'prenoms'                => ['required', 'string', 'max:255'],
-            'sexe'                   => ['required', 'string', 'in:M,F'],
-            'date_naissance'         => ['required', 'date'],
-            'lieu_naissance'         => ['nullable', 'string', 'max:255'],
-            'adresse'                => ['nullable', 'string'],
-            'telephone'              => ['nullable', 'string', 'max:30'],
-            'photo_url'              => ['nullable', 'string', 'max:500'],
-            'situation_matrimoniale' => ['nullable', 'string', 'max:100'],
+            'nom'                       => ['required', 'string', 'max:255'],
+            'prenoms'                   => ['required', 'string', 'max:255'],
+            'sexe'                      => ['required', 'string', 'in:M,F,m,f'],
+            'date_naissance'            => ['required', 'date'],
+            'lieu_naissance'            => ['nullable', 'string', 'max:255'],
+            'adresse'                   => ['nullable', 'string'],
+            'telephone'                 => ['nullable', 'string', 'max:30'],
+            'photo_url'                 => ['nullable', 'string', 'max:500'],
+            'situation_matrimoniale'    => ['nullable', 'string', 'max:100'],
+
 
             // Informations Parents / Tuteur
             'nom_pere'               => ['nullable', 'string', 'max:255'],

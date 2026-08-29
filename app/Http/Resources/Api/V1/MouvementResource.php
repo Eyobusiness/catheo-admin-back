@@ -12,7 +12,6 @@ class MouvementResource extends JsonResource
         return [
             'id'                 => $this->uuid,
             'nom'                => $this->nom,
-            'code'               => $this->code,
             'responsable'        => $this->responsable,
             'telephone'          => $this->telephone,
             'description'        => $this->description,

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+
 use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InscriptionAnnuelle extends Model
 {
-    use HasAuditFields, HasFactory, HasUuid, SoftDeletes;
+    use Auditable, HasAuditFields, HasFactory, HasUuid, SoftDeletes;
 
     protected $table = 'inscriptions_annuelles';
 
@@ -37,9 +39,18 @@ class InscriptionAnnuelle extends Model
         'frais_inscription_payes' => 'boolean',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function ($model) {
+            if (empty($model->date_inscription)) {
+                $model->date_inscription = now()->toDateString();
+            }
+        });
+    }
+
     public function paroisse(): BelongsTo
     {
-        return $this->belongsTo(ParoisseConfiguration::class, 'paroisse_configuration_id');
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
     }
 
     public function catechumene(): BelongsTo

@@ -9,13 +9,19 @@ class CatechumeneResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $latestInscription = $this->inscriptionsAnnuelles?->first();
+
         return [
             'id'                          => $this->uuid,
-            'code_catechumene'            => $this->code_catechumene,
-            'matricule'                   => $this->code_catechumene,
+            'uuid'                        => $this->uuid,
+            'matricule'                   => $this->matricule ?? $this->code_catechumene,
+            'code_catechumene'            => $this->matricule ?? $this->code_catechumene,
             'nom'                         => $this->nom,
+            'prenom'                      => $this->prenoms,
             'prenoms'                     => $this->prenoms,
-            'nom_complet'                 => trim("{$this->prenoms} {$this->nom}"),
+            'nom_complet'                 => trim("{$this->nom} {$this->prenoms}"),
+            'nom_prenoms'                 => trim("{$this->nom} {$this->prenoms}"),
+            'nomPrenoms'                  => trim("{$this->nom} {$this->prenoms}"),
             'sexe'                        => $this->sexe,
             'date_naissance'              => $this->date_naissance?->toDateString(),
             'lieu_naissance'              => $this->lieu_naissance,
@@ -27,6 +33,16 @@ class CatechumeneResource extends JsonResource
             'telephone'                   => $this->telephone,
             'photo_path'                  => $this->photo_path,
             'photo_url'                   => $this->photo_path,
+
+            // Shortcuts Inscription Active pour les sélecteurs et tables
+            'classe_id'                   => $latestInscription?->classe?->uuid,
+            'classe_nom'                  => $latestInscription?->classe?->nom,
+            'niveau_id'                   => $latestInscription?->niveau?->uuid,
+            'niveau_nom'                  => $latestInscription?->niveau?->nom,
+            'section_id'                  => $latestInscription?->section?->uuid ?? $latestInscription?->niveau?->section?->uuid,
+            'section_nom'                 => $latestInscription?->section?->nom ?? $latestInscription?->niveau?->section?->nom,
+            'annee_catechese_id'          => $latestInscription?->anneeCatechese?->uuid,
+            'annee_libelle'               => $latestInscription?->anneeCatechese?->libelle,
             
             // Filiation & Tuteurs
             'nom_pere'                    => $this->nom_pere,
@@ -54,9 +70,27 @@ class CatechumeneResource extends JsonResource
 
             // Statut & Relations
             'statut'                      => $this->statut,
-            'ceb'                         => new CebResource($this->whenLoaded('ceb')),
-            'inscriptions_annuelles'      => InscriptionAnnuelleResource::collection($this->whenLoaded('inscriptionsAnnuelles')),
-            'parrains_marraines'          => ParrainMarraineResource::collection($this->whenLoaded('parrainsMarraines')),
+            'ceb'                         => $this->relationLoaded('ceb') && $this->ceb ? new CebResource($this->ceb) : null,
+            'inscriptions_annuelles'      => $this->whenLoaded('inscriptionsAnnuelles', function () {
+                return $this->inscriptionsAnnuelles->map(function ($ins) {
+                    return [
+                        'id'                      => $ins->uuid,
+                        'code_inscription'        => $ins->code_inscription,
+                        'date_inscription'        => $ins->date_inscription?->toDateString(),
+                        'statut_inscription'      => $ins->statut_inscription,
+                        'frais_inscription_payes' => (bool) $ins->frais_inscription_payes,
+                        'annee_catechese_id'      => $ins->anneeCatechese?->uuid,
+                        'annee_libelle'           => $ins->anneeCatechese?->libelle,
+                        'section_id'              => $ins->section?->uuid ?? $ins->niveau?->section?->uuid,
+                        'section_nom'             => $ins->section?->nom ?? $ins->niveau?->section?->nom,
+                        'niveau_id'               => $ins->niveau?->uuid,
+                        'niveau_nom'              => $ins->niveau?->nom,
+                        'classe_id'               => $ins->classe?->uuid,
+                        'classe_nom'              => $ins->classe?->nom,
+                    ];
+                });
+            }),
+            'parrains_marraines'          => $this->relationLoaded('parrainsMarraines') ? ParrainMarraineResource::collection($this->parrainsMarraines) : null,
             'created_at'                  => $this->created_at?->toIso8601String(),
         ];
     }

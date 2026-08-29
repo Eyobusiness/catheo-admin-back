@@ -242,7 +242,7 @@ class ProfilSeeder extends Seeder
             if (in_array($ref, ['dashboard', 'main_presences', 'seances', 'main_evaluations', 'evaluations', 'notes', 'bilans_annuels', 'bulletins'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true, 'can_restore' => true, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annee_catecheses', 'sections', 'niveaux', 'classes', 'groupes', 'animateurs', 'affectations_animateurs', 'calendrier_activites', 'modules_trimestriels'])) {
+            if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annee_catecheses', 'sections', 'niveaux', 'classes', 'animateurs', 'affectations_animateurs', 'calendrier_activites', 'modules_trimestriels'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             if (str_starts_with($ref, 'main_catechumenes') || str_starts_with($ref, 'main_impressions') || str_starts_with($ref, 'imp_')) {

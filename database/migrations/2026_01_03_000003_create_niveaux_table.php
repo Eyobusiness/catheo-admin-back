@@ -21,10 +21,8 @@ return new class extends Migration
                 ->constrained('sections')
                 ->cascadeOnDelete();
             $table->string('nom');
-            $table->string('code')->nullable();
             $table->text('description')->nullable();
             $table->string('statut')->default('actif'); // actif, inactif
-            $table->integer('duree_annees')->default(1);
             $table->integer('ordre_affichage')->default(0);
             $table->timestamps();
             $table->softDeletes();
