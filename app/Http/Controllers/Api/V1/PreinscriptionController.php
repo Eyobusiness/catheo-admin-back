@@ -290,7 +290,7 @@ class PreinscriptionController extends Controller
 
         $validated = $request->validated();
 
-        $resultat = DB::transaction(function () use ($item, $validated) {
+        $resultat = DB::transaction(function () use ($item, $validated, $request) {
             $niveauParam = $validated['niveau_id'] ?? $item->niveau_souhaite_id;
             $niveau = is_numeric($niveauParam) 
                 ? Niveau::findOrFail($niveauParam) 
@@ -394,36 +394,38 @@ class PreinscriptionController extends Controller
                 ]
             );
 
-            // 3. Déclenchement automatique de l'opération de paiement en attente dans la finance
+            // 3. Déclenchement automatique de l'opération de paiement en attente dans la finance UNIQUEMENT si un tarif réel existe
             if (!$inscription->frais_inscription_payes) {
-                $tarif = Tarif::where('paroisse_configuration_id', $item->paroisse_configuration_id)
-                    ->where('type_tarif', 'inscription')
-                    ->where(function ($q) use ($niveau) {
-                        $q->where('niveau_id', $niveau->id)
-                          ->orWhereNull('niveau_id');
-                    })
-                    ->first();
-
-                $montant = $tarif ? (float) $tarif->montant : 15000;
-                $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', OperationPaiement::where('paroisse_configuration_id', $item->paroisse_configuration_id)->count() + 1);
-
-                OperationPaiement::firstOrCreate(
-                    [
-                        'paroisse_configuration_id' => $item->paroisse_configuration_id,
-                        'catechumene_id'            => $catechumene->id,
-                        'annee_catechese_id'        => $anneeId,
-                        'statut'                    => 'en_attente',
-                    ],
-                    [
-                        'tarif_id'     => $tarif?->id,
-                        'reference'    => $reference,
-                        'libelle'      => "Frais d'inscription - {$catechumene->nom_complet} ({$niveau->nom})",
-                        'montant'      => $montant,
-                        'montant_paye' => 0,
-                        'echeance'     => now()->addMonths(1)->toDateString(),
-                        'statut'       => 'en_attente',
-                    ]
+                $explicitTarifId = $validated['tarif_id'] ?? $request->input('tarif_id');
+                $tarif = Tarif::resolveForInscription(
+                    $item->paroisse_configuration_id,
+                    $anneeId,
+                    $niveau,
+                    $explicitTarifId
                 );
+
+                if ($tarif) {
+                    $refCount = OperationPaiement::where('paroisse_configuration_id', $item->paroisse_configuration_id)->count() + 1;
+                    $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', $refCount);
+
+                    OperationPaiement::updateOrCreate(
+                        [
+                            'paroisse_configuration_id' => $item->paroisse_configuration_id,
+                            'catechumene_id'            => $catechumene->id,
+                            'annee_catechese_id'        => $anneeId,
+                            'tarif_id'                  => $tarif->id,
+                            'statut'                    => 'en_attente',
+                        ],
+                        [
+                            'reference'    => $reference,
+                            'libelle'      => "{$tarif->intitule} - {$catechumene->nom_complet} ({$niveau->nom})",
+                            'montant'      => (float) $tarif->montant,
+                            'montant_paye' => 0,
+                            'echeance'     => $tarif->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
+                            'statut'       => 'en_attente',
+                        ]
+                    );
+                }
             }
 
             // 4. Création du Parrain/Marraine si renseigné

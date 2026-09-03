@@ -10,16 +10,19 @@ class MenuResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'        => $this->uuid,
-            'uuid'      => $this->uuid,
-            'libelle'   => $this->libelle,
-            'icon'      => $this->icon,
-            'path'      => $this->path,
-            'reference' => $this->reference,
-            'ordre'     => $this->ordre,
-            'is_active' => $this->is_active,
-            'parent_id' => $this->parent?->uuid,
-            'sousMenus' => MenuResource::collection($this->whenLoaded('sousMenus')),
+            'id'         => $this->uuid,
+            'uuid'       => $this->uuid,
+            'order'      => $this->ordre,
+            'ordre'      => $this->ordre,
+            'libelle'    => $this->libelle,
+            'icon'       => $this->icon,
+            'path'       => $this->path,
+            'code'       => $this->code ?? '',
+            'permission' => $this->permission,
+            'reference'  => $this->reference,
+            'is_active'  => $this->is_active,
+            'parent_id'  => $this->parent?->uuid,
+            'sousMenus'  => MenuResource::collection($this->whenLoaded('sousMenus')),
         ];
     }
 }

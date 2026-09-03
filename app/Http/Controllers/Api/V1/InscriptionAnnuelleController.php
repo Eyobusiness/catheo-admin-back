@@ -156,45 +156,59 @@ class InscriptionAnnuelleController extends Controller
         $paroisseId = $request->user()->paroisse_configuration_id;
 
         $validated = $request->validate([
-            'catechumene_id'          => ['required', 'string', 'exists:catechumenes,uuid'],
-            'annee_catechese_id'      => ['required', 'string', 'exists:annee_catecheses,uuid'],
-            'section_id'              => ['nullable', 'string', 'exists:sections,uuid'],
-            'niveau_id'               => ['required', 'string', 'exists:niveaux,uuid'],
-            'classe_id'               => ['nullable', 'string', 'exists:classes,uuid'],
-            'ceb_id'                  => ['nullable', 'string', 'exists:cebs,uuid'],
-            'mouvement_id'            => ['nullable', 'string', 'exists:mouvements,uuid'],
+            'catechumene_id'          => ['required', 'string'],
+            'annee_catechese_id'      => ['required', 'string'],
+            'section_id'              => ['nullable', 'string'],
+            'niveau_id'               => ['required', 'string'],
+            'classe_id'               => ['nullable', 'string'],
+            'ceb_id'                  => ['nullable', 'string'],
+            'mouvement_id'            => ['nullable', 'string'],
+            'tarif_id'                => ['nullable', 'string'],
             'date_inscription'        => ['nullable', 'date'],
             'frais_inscription_payes' => ['nullable', 'boolean'],
             'observation'             => ['nullable', 'string'],
         ]);
 
-        $catechumene = Catechumene::where('uuid', $validated['catechumene_id'])->firstOrFail();
-        $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->firstOrFail();
-        $niveau = Niveau::where('uuid', $validated['niveau_id'])->firstOrFail();
+        $catechumene = is_numeric($validated['catechumene_id'])
+            ? Catechumene::findOrFail($validated['catechumene_id'])
+            : Catechumene::where('uuid', $validated['catechumene_id'])->firstOrFail();
+
+        $annee = is_numeric($validated['annee_catechese_id'])
+            ? AnneeCatechese::findOrFail($validated['annee_catechese_id'])
+            : AnneeCatechese::where('uuid', $validated['annee_catechese_id'])->firstOrFail();
+
+        $niveau = is_numeric($validated['niveau_id'])
+            ? Niveau::findOrFail($validated['niveau_id'])
+            : Niveau::where('uuid', $validated['niveau_id'])->firstOrFail();
+
+        $paroisseId = $paroisseId ?? $catechumene->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::value('id');
 
         $validated['paroisse_configuration_id'] = $paroisseId;
         $validated['catechumene_id'] = $catechumene->id;
         $validated['annee_catechese_id'] = $annee->id;
         $validated['niveau_id'] = $niveau->id;
         $validated['section_id'] = !empty($validated['section_id'])
-            ? Section::where('uuid', $validated['section_id'])->value('id')
+            ? (is_numeric($validated['section_id']) ? (int)$validated['section_id'] : Section::where('uuid', $validated['section_id'])->value('id'))
             : $niveau->section_id;
         $validated['date_inscription'] = $validated['date_inscription'] ?? now()->toDateString();
         $validated['statut_inscription'] = 'valide';
 
         if (!empty($validated['classe_id'])) {
-            $classe = Classe::where('uuid', $validated['classe_id'])->firstOrFail();
-            $validated['classe_id'] = $classe->id;
+            $validated['classe_id'] = is_numeric($validated['classe_id'])
+                ? (int)$validated['classe_id']
+                : Classe::where('uuid', $validated['classe_id'])->value('id');
         }
 
         if (!empty($validated['ceb_id'])) {
-            $ceb = Ceb::where('uuid', $validated['ceb_id'])->firstOrFail();
-            $validated['ceb_id'] = $ceb->id;
+            $validated['ceb_id'] = is_numeric($validated['ceb_id'])
+                ? (int)$validated['ceb_id']
+                : Ceb::where('uuid', $validated['ceb_id'])->value('id');
         }
 
         if (!empty($validated['mouvement_id'])) {
-            $mouvement = Mouvement::where('uuid', $validated['mouvement_id'])->firstOrFail();
-            $validated['mouvement_id'] = $mouvement->id;
+            $validated['mouvement_id'] = is_numeric($validated['mouvement_id'])
+                ? (int)$validated['mouvement_id']
+                : Mouvement::where('uuid', $validated['mouvement_id'])->value('id');
         }
 
         // Générer un code d'inscription unique si absent
@@ -207,36 +221,31 @@ class InscriptionAnnuelleController extends Controller
         $inscription = InscriptionAnnuelle::create($validated);
         $inscription->load(['catechumene', 'anneeCatechese', 'section', 'niveau', 'classe', 'ceb', 'mouvement']);
 
-        // Déclencher une opération de paiement en attente dans la finance si non payé
+        // Déclencher une opération de paiement en attente dans la finance UNIQUEMENT si un tarif réel existe
         if (!$inscription->frais_inscription_payes) {
-            $tarif = Tarif::where('paroisse_configuration_id', $paroisseId)
-                ->where('type_tarif', 'inscription')
-                ->where(function ($q) use ($niveau) {
-                    $q->where('niveau_id', $niveau->id)
-                      ->orWhereNull('niveau_id');
-                })
-                ->first();
+            $tarif = $this->resolveTarifForInscription($paroisseId, $annee->id, $niveau, $request->input('tarif_id'));
 
-            $montant = $tarif ? (float) $tarif->montant : 15000;
-            $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', OperationPaiement::where('paroisse_configuration_id', $paroisseId)->count() + 1);
+            if ($tarif) {
+                $refCount = OperationPaiement::where('paroisse_configuration_id', $paroisseId)->count() + 1;
+                $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', $refCount);
 
-            OperationPaiement::firstOrCreate(
-                [
-                    'paroisse_configuration_id' => $paroisseId,
-                    'catechumene_id'            => $catechumene->id,
-                    'annee_catechese_id'        => $annee->id,
-                    'statut'                    => 'en_attente',
-                ],
-                [
-                    'tarif_id'     => $tarif?->id,
-                    'reference'    => $reference,
-                    'libelle'      => "Frais d'inscription - {$catechumene->nom_complet} ({$niveau->nom})",
-                    'montant'      => $montant,
-                    'montant_paye' => 0,
-                    'echeance'     => now()->addMonths(1)->toDateString(),
-                    'statut'       => 'en_attente',
-                ]
-            );
+                OperationPaiement::updateOrCreate(
+                    [
+                        'paroisse_configuration_id' => $paroisseId,
+                        'catechumene_id'            => $catechumene->id,
+                        'annee_catechese_id'        => $annee->id,
+                        'tarif_id'                  => $tarif->id,
+                        'statut'                    => 'en_attente',
+                    ],
+                    [
+                        'reference'    => $reference,
+                        'libelle'      => "{$tarif->intitule} - {$catechumene->nom_complet} ({$niveau->nom})",
+                        'montant'      => (float) $tarif->montant,
+                        'montant_paye' => 0,
+                        'echeance'     => $tarif->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
+                    ]
+                );
+            }
         }
 
         return response()->json([
@@ -487,6 +496,14 @@ class InscriptionAnnuelleController extends Controller
             'status'  => 'success',
             'message' => 'Inscription supprimée avec succès.',
         ]);
+    }
+
+    /**
+     * Résout le tarif d'inscription approprié pour un niveau et une année pastorale.
+     */
+    private function resolveTarifForInscription(int $paroisseId, ?int $anneeId, ?Niveau $niveau, ?string $explicitTarifId = null): ?Tarif
+    {
+        return Tarif::resolveForInscription($paroisseId, $anneeId, $niveau, $explicitTarifId);
     }
 
     private function authorizeTenant(?int $userParoisseId, ?int $targetParoisseId): void

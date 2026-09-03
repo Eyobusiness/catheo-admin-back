@@ -58,7 +58,7 @@ class CampagnePreinscription extends Model
 
     public function getPublicUrlAttribute(): string
     {
-        $frontendUrl = env('FRONTEND_URL', config('app.url', 'http://localhost:4200'));
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:4200');
         return rtrim($frontendUrl, '/') . "/preinscriptions/campagne/{$this->uuid}";
     }
 

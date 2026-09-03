@@ -27,7 +27,7 @@ class StorePreinscriptionRequest extends FormRequest
             'nom'                       => ['required', 'string', 'max:255'],
             'prenoms'                   => ['required', 'string', 'max:255'],
             'sexe'                      => ['required', 'string', 'in:M,F,m,f'],
-            'date_naissance'            => ['required', 'date'],
+            'date_naissance'            => ['nullable', 'date'],
             'lieu_naissance'            => ['nullable', 'string', 'max:255'],
             'adresse'                   => ['nullable', 'string'],
             'telephone'                 => ['nullable', 'string', 'max:30'],

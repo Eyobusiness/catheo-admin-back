@@ -38,13 +38,17 @@ class ProfilController extends Controller
             $sousMenusList = [];
             foreach ($menu->sousMenus as $sm) {
                 $sousMenusList[] = [
-                    'uuid'      => $sm->uuid,
-                    'libelle'   => $sm->libelle,
-                    'reference' => $sm->reference,
-                    'path'      => $sm->path,
-                    'icon'      => $sm->icon,
-                    'ordre'     => $sm->ordre,
-                    'actions'   => $actions,
+                    'id'         => $sm->uuid,
+                    'uuid'       => $sm->uuid,
+                    'order'      => $sm->ordre,
+                    'ordre'      => $sm->ordre,
+                    'libelle'    => $sm->libelle,
+                    'code'       => $sm->code ?? '',
+                    'permission' => $sm->permission,
+                    'reference'  => $sm->reference,
+                    'path'       => $sm->path,
+                    'icon'       => $sm->icon,
+                    'actions'    => $actions,
                 ];
             }
 
@@ -57,14 +61,17 @@ class ProfilController extends Controller
             }
 
             $tree[] = [
+                'id'            => $menu->uuid,
                 'uuid'          => $menu->uuid,
+                'order'         => $menu->ordre,
+                'ordre'         => $menu->ordre,
                 'menu'          => $menu->libelle,
                 'libelle'       => $menu->libelle,
+                'code'          => $menu->code ?? $menu->reference,
+                'permission'    => $menu->permission,
                 'reference'     => $menu->reference,
-                'code'          => $menu->reference,
                 'path'          => $menu->path,
                 'icon'          => $menu->icon,
-                'ordre'         => $menu->ordre,
                 'total_actions' => count($actions),
                 'actions'       => $actions,
                 'permissions'   => $permissionsList,

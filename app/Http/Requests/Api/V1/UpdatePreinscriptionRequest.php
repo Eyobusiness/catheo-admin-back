@@ -27,7 +27,7 @@ class UpdatePreinscriptionRequest extends FormRequest
             'nom'                       => ['sometimes', 'required', 'string', 'max:255'],
             'prenoms'                   => ['sometimes', 'required', 'string', 'max:255'],
             'sexe'                      => ['sometimes', 'required', 'string', 'in:M,F,m,f'],
-            'date_naissance'            => ['sometimes', 'required', 'date'],
+            'date_naissance'            => ['nullable', 'date'],
             'lieu_naissance'            => ['nullable', 'string', 'max:255'],
             'adresse'                   => ['nullable', 'string'],
             'telephone'                 => ['nullable', 'string', 'max:30'],

@@ -10,21 +10,21 @@ use Illuminate\Database\Seeder;
 class ProfilSeeder extends Seeder
 {
     /**
-     * Crée les 7 profils réalistes et leur assigne leurs matrices de permissions fines.
+     * Crée les profils et leur assigne leurs matrices de permissions fines.
      */
     public function run(): void
     {
         $allMenus = Menu::all()->keyBy('reference');
 
-        // Définition des 7 profils
+        // Définition des profils
         $profilsConfig = [
             [
                 'code'        => 'SUPER_ADMIN',
                 'nom'         => 'Super Administrateur',
-                'description' => 'Accès complet et sans restriction à l\'ensemble de la plateforme SaaS Catheo.',
+                'description' => 'Accès complet et sans restriction à l\'ensemble de la plateforme Catheo.',
                 'permissions' => ['*'],
                 'is_system'   => true,
-                'rules'       => 'all_full', // Tous les menus avec Read, Create, Update, Delete, Restore, Force Delete
+                'rules'       => 'all_full',
             ],
             [
                 'code'        => 'ADMIN_PAROISSE',
@@ -43,7 +43,7 @@ class ProfilSeeder extends Seeder
                     'impressions.generate',
                 ],
                 'is_system'   => true,
-                'rules'       => 'all_no_force', // Tous les menus avec Read, Create, Update, Delete, Restore
+                'rules'       => 'all_no_force',
             ],
             [
                 'code'        => 'SECRETAIRE',
@@ -98,7 +98,7 @@ class ProfilSeeder extends Seeder
             [
                 'code'        => 'COMPTABLE',
                 'nom'         => 'Comptable Paroissial',
-                'description' => 'Gestion financière complète : encaissements, caisse, grille tarifaire et versements au Curé.',
+                'description' => 'Gestion financière complète : encaissements, caisse, grille tarifaire et versements.',
                 'permissions' => [
                     'dashboard.view',
                     'finances.view',
@@ -123,7 +123,6 @@ class ProfilSeeder extends Seeder
                 'is_system'   => false,
                 'rules'       => 'lecteur',
             ],
-            // Profils de compatibilité système
             [
                 'code'        => 'CATECHISTE',
                 'nom'         => 'Catéchiste Paroissial',
@@ -140,7 +139,7 @@ class ProfilSeeder extends Seeder
             [
                 'code'        => 'PARENT',
                 'nom'         => 'Parent / Tuteur',
-                'description' => 'Espace parent : consultation du carnet, présences, notes et bulletins de l\'enfant.',
+                'description' => 'Espace parent : consultation du carnet, présences, notes et bulletins.',
                 'permissions' => [
                     'dashboard.view',
                     'presences.view',
@@ -165,7 +164,7 @@ class ProfilSeeder extends Seeder
             // Création des permissions relationnelles pour chaque menu
             foreach ($allMenus as $menu) {
                 $perms = $this->getPermissionsForRules($rules, $menu->reference);
-                
+
                 ProfilMenuPermission::updateOrCreate(
                     [
                         'profil_id' => $profil->id,
@@ -218,20 +217,23 @@ class ProfilSeeder extends Seeder
         }
 
         if ($rules === 'secretaire') {
-            // Secrétaire : Dashboard, Catéchumènes (full), Impressions (read/create), Sacrements (read/create), Organisation (read)
+            // Secrétaire : Dashboard, Catéchumènes (full), Impressions (read/create), Sacrements (read/create/update), Organisation (read)
             if ($ref === 'dashboard') {
                 return ['can_read' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_catechumenes') || in_array($ref, ['campagnes_preinscriptions', 'preinscriptions', 'inscriptions_annuelles', 'affectations_catechumenes', 'mutations_catechumenes', 'liste_catechumenes'])) {
+            if (str_starts_with($ref, 'main_catechumenes') || in_array($ref, ['campagnes_preinscriptions', 'preinscriptions', 'inscriptions_annuelles', 'affectations', 'mutations', 'catechumenes'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true, 'can_restore' => true, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_impressions') || str_starts_with($ref, 'imp_')) {
+            if (str_starts_with($ref, 'main_impressions') || in_array($ref, ['fiche_notes', 'liste_presence', 'fiche_bilan_annuel', 'fiche_suivi_sacramentel', 'renseignements_bapteme', 'renseignements_premiere_communion', 'renseignements_confirmation'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_sacrements') || str_starts_with($ref, 'sacrement_')) {
+            if (str_starts_with($ref, 'main_sacrements') || in_array($ref, ['bapteme', 'premiere_communion', 'confirmation', 'exceptions_pastorales'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annee_catecheses', 'sections', 'niveaux', 'classes'])) {
+            if (str_starts_with($ref, 'main_documents') || in_array($ref, ['modeles_documents', 'generation_documents'])) {
+                return ['can_read' => true, 'can_create' => true, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
+            }
+            if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annees_pastorales', 'sections', 'niveaux', 'classes'])) {
                 return ['can_read' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             return $none;
@@ -242,10 +244,10 @@ class ProfilSeeder extends Seeder
             if (in_array($ref, ['dashboard', 'main_presences', 'seances', 'main_evaluations', 'evaluations', 'notes', 'bilans_annuels', 'bulletins'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true, 'can_restore' => true, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annee_catecheses', 'sections', 'niveaux', 'classes', 'animateurs', 'affectations_animateurs', 'calendrier_activites', 'modules_trimestriels'])) {
+            if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annees_pastorales', 'sections', 'niveaux', 'classes', 'animateurs', 'affectations_animateurs', 'cebs', 'mouvements', 'calendrier', 'modules_trimestriels'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_catechumenes') || str_starts_with($ref, 'main_impressions') || str_starts_with($ref, 'imp_')) {
+            if (str_starts_with($ref, 'main_catechumenes') || str_starts_with($ref, 'main_impressions') || str_starts_with($ref, 'main_sacrements') || in_array($ref, ['fiche_notes', 'liste_presence', 'fiche_bilan_annuel', 'fiche_suivi_sacramentel', 'renseignements_bapteme', 'renseignements_premiere_communion', 'renseignements_confirmation', 'bapteme', 'premiere_communion', 'confirmation', 'exceptions_pastorales', 'campagnes_preinscriptions', 'preinscriptions', 'inscriptions_annuelles', 'affectations', 'mutations', 'catechumenes'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             return $none;
@@ -259,7 +261,7 @@ class ProfilSeeder extends Seeder
             if (in_array($ref, ['main_presences', 'seances', 'main_evaluations', 'notes'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (in_array($ref, ['evaluations', 'bulletins', 'main_organisation', 'classes', 'calendrier_activites'])) {
+            if (in_array($ref, ['evaluations', 'bilans_annuels', 'bulletins', 'main_organisation', 'classes', 'calendrier', 'modules_trimestriels'])) {
                 return ['can_read' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             return $none;
@@ -270,10 +272,10 @@ class ProfilSeeder extends Seeder
             if ($ref === 'dashboard') {
                 return ['can_read' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_finances') || in_array($ref, ['tarification', 'operations_financieres', 'caisse_paroissiale', 'versements_cure'])) {
+            if (str_starts_with($ref, 'main_finances') || in_array($ref, ['tarifications', 'operations_financieres', 'caisse', 'versements'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true, 'can_restore' => true, 'can_force_delete' => false];
             }
-            if (str_starts_with($ref, 'main_rapports') || in_array($ref, ['statistiques', 'rapports', 'liste_catechumenes', 'main_catechumenes'])) {
+            if (str_starts_with($ref, 'main_rapports') || in_array($ref, ['catechumenes', 'main_catechumenes'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             return $none;
@@ -281,7 +283,7 @@ class ProfilSeeder extends Seeder
 
         if ($rules === 'lecteur') {
             // Lecteur : read-only sur tout sauf administration sensible
-            if (!in_array($ref, ['main_users_security', 'utilisateurs', 'profils', 'main_settings', 'sauvegardes'])) {
+            if (!in_array($ref, ['main_utilisateurs_securite', 'utilisateurs', 'profils', 'main_parametres', 'configuration_paroisse', 'sauvegardes'])) {
                 return ['can_read' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             return $none;

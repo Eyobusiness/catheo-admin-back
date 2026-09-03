@@ -18,7 +18,7 @@ class StoreCatechumeneRequest extends FormRequest
             'nom'                          => ['required', 'string', 'max:255'],
             'prenoms'                      => ['required', 'string', 'max:255'],
             'sexe'                         => ['required', 'string', 'in:M,F'],
-            'date_naissance'               => ['required', 'date'],
+            'date_naissance'               => ['nullable', 'date'],
             'lieu_naissance'               => ['nullable', 'string', 'max:255'],
             'adresse'                      => ['nullable', 'string'],
             'domicile'                     => ['nullable', 'string', 'max:255'],
@@ -26,8 +26,9 @@ class StoreCatechumeneRequest extends FormRequest
             'classe_scolaire'              => ['nullable', 'string', 'max:100'],
             'situation_matrimoniale'       => ['nullable', 'string', 'max:100'],
             'telephone'                    => ['nullable', 'string', 'max:30'],
-            'photo_path'                   => ['nullable', 'string', 'max:500'],
-            'photo_url'                    => ['nullable', 'string', 'max:500'],
+            'photo_path'                   => ['nullable', 'string'],
+            'photo_url'                    => ['nullable', 'string'],
+            'photo'                        => ['nullable', 'string'],
             
             // Filiation & Tuteurs
             'nom_pere'                     => ['nullable', 'string', 'max:255'],

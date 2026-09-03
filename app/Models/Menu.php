@@ -21,6 +21,8 @@ class Menu extends Model
         'libelle',
         'icon',
         'path',
+        'code',
+        'permission',
         'reference',
         'ordre',
         'is_active',
@@ -30,6 +32,14 @@ class Menu extends Model
         'is_active' => 'boolean',
         'ordre'     => 'integer',
     ];
+
+    /**
+     * Alias order pour correspondre au format Angular.
+     */
+    public function getOrderAttribute(): ?int
+    {
+        return $this->ordre;
+    }
 
     /**
      * Menu parent (si c'est un sous-menu).

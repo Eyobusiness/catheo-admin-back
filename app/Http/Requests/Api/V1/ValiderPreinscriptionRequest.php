@@ -14,8 +14,11 @@ class ValiderPreinscriptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'niveau_id' => ['required', 'string', 'exists:niveaux,uuid'],
-            'classe_id' => ['nullable', 'string', 'exists:classes,uuid'],
+            'niveau_id'        => ['required', 'string'],
+            'classe_id'        => ['nullable', 'string'],
+            'catechumene_id'   => ['nullable', 'string'],
+            'tarif_id'         => ['nullable', 'string'],
+            'frais_payes'      => ['nullable', 'boolean'],
             'notes_validation' => ['nullable', 'string'],
         ];
     }

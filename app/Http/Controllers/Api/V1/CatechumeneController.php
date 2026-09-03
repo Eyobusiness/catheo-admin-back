@@ -5,16 +5,20 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreCatechumeneRequest;
 use App\Http\Requests\Api\V1\UpdateCatechumeneRequest;
+use App\Http\Resources\Api\V1\CatecheseConfigurationResource;
 use App\Http\Resources\Api\V1\CatechumeneResource;
 use App\Models\AnneeCatechese;
+use App\Models\CatecheseConfiguration;
 use App\Models\Ceb;
 use App\Models\Classe;
 use App\Models\Catechumene;
 use App\Models\Niveau;
 use App\Models\Section;
+use App\Services\ParoisseHeaderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 class CatechumeneController extends Controller
 {
@@ -206,11 +210,136 @@ class CatechumeneController extends Controller
     }
 
     /**
+     * Fournit toutes les données pour l'impression de la fiche catéchumène par Angular.
+     */
+    public function ficheImpression(Request $request, mixed $catechumene): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+
+        $cat = is_numeric($catechumene)
+            ? Catechumene::find((int) $catechumene)
+            : Catechumene::where('uuid', $catechumene)->orWhere('matricule', $catechumene)->first();
+
+        if (!$cat) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Catéchumène introuvable.',
+            ], 404);
+        }
+
+        $this->authorizeTenant($paroisseId, $cat->paroisse_configuration_id);
+
+        $paroisse = CatecheseConfiguration::find($cat->paroisse_configuration_id)
+            ?? CatecheseConfiguration::find($paroisseId)
+            ?? CatecheseConfiguration::firstOrFail();
+
+        $cat->loadMissing([
+            'ceb',
+            'parrainsMarraines',
+            'inscriptionsAnnuelles.classe',
+            'inscriptionsAnnuelles.niveau.section',
+            'inscriptionsAnnuelles.anneeCatechese',
+        ]);
+
+        $inscription = $cat->inscriptionsAnnuelles?->sortByDesc('id')->first();
+        $annee = AnneeCatechese::resolveAnnee($request, $paroisse->id) ?? $inscription?->anneeCatechese;
+
+        $headerService = app(ParoisseHeaderService::class);
+        $entete = $headerService->getHeaderData($paroisse, $annee);
+
+        $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
+        $parrain = $cat->parrainsMarraines->firstWhere('type', 'parrain');
+        $marraine = $cat->parrainsMarraines->firstWhere('type', 'marraine');
+
+        $photoUrl = $cat->photo_url
+            ?? ($cat->photo_path ? asset('storage/' . ltrim($cat->photo_path, '/')) : null);
+
+        return response()->json([
+            'status'      => 'success',
+            'entete'      => $entete,
+            'paroisse'    => new CatecheseConfigurationResource($paroisse),
+            'catechumene' => [
+                'id'                     => $cat->uuid,
+                'matricule'              => $cat->matricule,
+                'nom'                    => $cat->nom,
+                'prenom'                 => $prenom,
+                'prenoms'                => $prenom,
+                'nom_complet'            => trim($cat->nom . ' ' . $prenom),
+                'sexe'                   => $cat->sexe,
+                'date_naissance'         => $cat->date_naissance ? (is_string($cat->date_naissance) ? substr($cat->date_naissance, 0, 10) : $cat->date_naissance->toDateString()) : null,
+                'lieu_naissance'         => $cat->lieu_naissance,
+                'adresse'                => $cat->adresse,
+                'domicile'               => $cat->domicile ?? $cat->adresse,
+                'telephone'              => $cat->telephone,
+                'profession'             => $cat->profession,
+                'classe_scolaire'        => $cat->classe_scolaire,
+                'situation_matrimoniale' => $cat->situation_matrimoniale,
+                'photo_url'              => $photoUrl,
+                'filiation'              => [
+                    'pere'   => ['nom' => $cat->nom_pere, 'telephone' => $cat->telephone_pere],
+                    'mere'   => ['nom' => $cat->nom_mere, 'telephone' => $cat->telephone_mere],
+                    'tuteur' => ['nom' => $cat->nom_tuteur, 'telephone' => $cat->telephone_tuteur],
+                ],
+                'sacrements'             => [
+                    'bapteme'            => [
+                        'est_baptise'      => (bool) $cat->est_baptise,
+                        'date_bapteme'     => $cat->date_bapteme ? (is_string($cat->date_bapteme) ? substr($cat->date_bapteme, 0, 10) : $cat->date_bapteme->toDateString()) : null,
+                        'lieu_bapteme'     => $cat->lieu_bapteme,
+                        'paroisse_bapteme' => $cat->paroisse_bapteme,
+                        'numero_acte'      => $cat->numero_acte_bapteme,
+                    ],
+                    'premiere_communion' => [
+                        'est_communiant'   => (bool) ($cat->premiere_communion ?? false),
+                        'date'             => $cat->date_premiere_communion ? (is_string($cat->date_premiere_communion) ? substr($cat->date_premiere_communion, 0, 10) : $cat->date_premiere_communion->toDateString()) : null,
+                        'paroisse'         => $cat->paroisse_premiere_communion,
+                    ],
+                    'confirmation'       => [
+                        'est_confirme'     => (bool) ($cat->confirmation ?? false),
+                        'date'             => $cat->date_confirmation ? (is_string($cat->date_confirmation) ? substr($cat->date_confirmation, 0, 10) : $cat->date_confirmation->toDateString()) : null,
+                        'paroisse'         => $cat->paroisse_confirmation,
+                    ],
+                ],
+            ],
+            'inscription_courante' => $inscription ? [
+                'code_inscription' => $inscription->code_inscription,
+                'date_inscription' => $inscription->date_inscription ? (is_string($inscription->date_inscription) ? substr($inscription->date_inscription, 0, 10) : $inscription->date_inscription->toDateString()) : null,
+                'statut'           => $inscription->statut_inscription,
+                'annee'            => $inscription->anneeCatechese?->libelle,
+                'section'          => $inscription->niveau?->section?->nom,
+                'niveau'           => $inscription->niveau?->nom,
+                'classe'           => $inscription->classe?->nom,
+            ] : null,
+            'parrain'     => $parrain ? [
+                'nom_prenoms'            => $parrain->nom_prenoms,
+                'telephone'              => $parrain->telephone,
+                'sacrement_confirmation' => (bool) $parrain->sacrement_confirmation,
+            ] : null,
+            'marraine'    => $marraine ? [
+                'nom_prenoms'            => $marraine->nom_prenoms,
+                'telephone'              => $marraine->telephone,
+                'sacrement_confirmation' => (bool) $marraine->sacrement_confirmation,
+            ] : null,
+            'ceb'         => $cat->ceb ? [
+                'nom'      => $cat->ceb->nom,
+                'quartier' => $cat->ceb->quartier,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * Alias de compatibilité retournant le JSON de la fiche catéchumène.
+     */
+    public function pdf(Request $request, mixed $catechumene): JsonResponse
+    {
+        return $this->ficheImpression($request, $catechumene);
+    }
+
+    /**
      * Création directe d'une fiche catéchumène par l'administration.
      */
     public function store(StoreCatechumeneRequest $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
         $validated = $request->validated();
 
         if (!empty($validated['ceb_id'])) {
@@ -218,10 +347,7 @@ class CatechumeneController extends Controller
             $validated['ceb_id'] = $ceb->id;
         }
 
-        if (empty($validated['photo_path']) && !empty($validated['photo_url'])) {
-            $validated['photo_path'] = $validated['photo_url'];
-        }
-        unset($validated['photo_url']);
+        $this->handlePhotoUpload($validated, $paroisseId);
 
         $validated['paroisse_configuration_id'] = $paroisseId;
 
@@ -232,8 +358,6 @@ class CatechumeneController extends Controller
 
         $catechumene = Catechumene::create($validated);
         $catechumene->load(['ceb', 'parrainsMarraines']);
-
-
 
         return response()->json([
             'status'  => 'success',
@@ -281,10 +405,7 @@ class CatechumeneController extends Controller
             }
         }
 
-        if (empty($validated['photo_path']) && !empty($validated['photo_url'])) {
-            $validated['photo_path'] = $validated['photo_url'];
-        }
-        unset($validated['photo_url']);
+        $this->handlePhotoUpload($validated, $catechumene->paroisse_configuration_id);
 
         $catechumene->update($validated);
         $catechumene->load([
@@ -301,6 +422,43 @@ class CatechumeneController extends Controller
             'message' => 'Catéchumène mis à jour avec succès.',
             'data'    => new CatechumeneResource($catechumene),
         ]);
+    }
+
+    /**
+     * Traite l'upload ou le décodage d'une photo Base64 / URL.
+     */
+    private function handlePhotoUpload(array &$validated, ?int $paroisseId): void
+    {
+        $photoInput = $validated['photo_path'] ?? ($validated['photo_url'] ?? ($validated['photo'] ?? null));
+        unset($validated['photo_url'], $validated['photo']);
+
+        if (empty($photoInput)) {
+            return;
+        }
+
+        // Si image Base64 (data:image/png;base64,...)
+        if (preg_match('/^data:image\/(\w+);base64,/', $photoInput, $matches)) {
+            $imageType = strtolower($matches[1]);
+            $imageData = substr($photoInput, strpos($photoInput, ',') + 1);
+            $decoded = base64_decode($imageData);
+
+            if ($decoded !== false) {
+                $ext = match ($imageType) {
+                    'jpeg', 'jpg' => 'jpg',
+                    'png'         => 'png',
+                    'gif'         => 'gif',
+                    'webp'        => 'webp',
+                    default       => 'png',
+                };
+                $filename = 'catechumenes/photos/' . ($paroisseId ? "p{$paroisseId}_" : '') . uniqid('cat_', true) . '.' . $ext;
+                Storage::disk('public')->put($filename, $decoded);
+                $validated['photo_path'] = $filename;
+                return;
+            }
+        }
+
+        // Si chemin standard
+        $validated['photo_path'] = $photoInput;
     }
 
     /**

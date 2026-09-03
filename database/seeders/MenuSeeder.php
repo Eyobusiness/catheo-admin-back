@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Menu;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class MenuSeeder extends Seeder
 {
@@ -14,174 +15,212 @@ class MenuSeeder extends Seeder
     {
         $menusStructure = [
             [
-                'libelle'   => 'Tableau de bord',
-                'icon'      => 'bi bi-speedometer2',
-                'path'      => '/dashboard',
-                'reference' => 'dashboard',
-                'ordre'     => 1,
-                'sousMenus' => [],
+                'ordre'      => 1,
+                'libelle'    => 'Tableau de bord',
+                'icon'       => 'bi bi-speedometer2',
+                'path'       => '/dashboard',
+                'code'       => '100',
+                'permission' => '1,2,3,4',
+                'reference'  => 'dashboard',
+                'is_active'  => true,
+                'sousMenus'  => [],
             ],
             [
-                'libelle'   => 'Catéchumènes',
-                'icon'      => 'bi bi-people',
-                'path'      => '#',
-                'reference' => 'main_catechumenes',
-                'ordre'     => 2,
-                'sousMenus' => [
-                    ['libelle' => 'Campagnes de préinscription', 'path' => '/campagnes-preinscriptions', 'reference' => 'campagnes_preinscriptions', 'icon' => 'bi bi-calendar-event', 'ordre' => 1],
-                    ['libelle' => 'Préinscriptions',            'path' => '/preinscriptions',            'reference' => 'preinscriptions',            'icon' => 'bi bi-person-plus',     'ordre' => 2],
-                    ['libelle' => 'Inscriptions annuelles',      'path' => '/inscriptions-annuelles',      'reference' => 'inscriptions_annuelles',      'icon' => 'bi bi-card-checklist',  'ordre' => 3],
-                    ['libelle' => 'Affectations',                'path' => '/affectations',                'reference' => 'affectations_catechumenes',  'icon' => 'bi bi-arrow-left-right', 'ordre' => 4],
-                    ['libelle' => 'Mutations',                   'path' => '/mutations',                   'reference' => 'mutations_catechumenes',     'icon' => 'bi bi-send',             'ordre' => 5],
-                    ['libelle' => 'Liste des catéchumènes',      'path' => '/catechumenes',               'reference' => 'liste_catechumenes',         'icon' => 'bi bi-person-lines-fill','ordre' => 6],
+                'ordre'      => 2,
+                'libelle'    => 'Catéchumènes',
+                'icon'       => 'bi bi-people',
+                'path'       => '#',
+                'code'       => '200',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_catechumenes',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Campagnes',               'icon' => 'bi bi-megaphone',          'path' => '/campagnes-preinscriptions', 'code' => '200', 'permission' => null, 'reference' => 'campagnes_preinscriptions', 'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Préinscriptions',          'icon' => 'bi bi-person-plus',        'path' => '/preinscriptions',            'code' => '200', 'permission' => null, 'reference' => 'preinscriptions',            'is_active' => true],
+                    ['ordre' => 3, 'libelle' => 'Inscriptions',            'icon' => 'bi bi-journal-check',      'path' => '/inscriptions-annuelles',      'code' => '200', 'permission' => null, 'reference' => 'inscriptions_annuelles',      'is_active' => true],
+                    ['ordre' => 4, 'libelle' => 'Affectations',            'icon' => 'bi bi-diagram-3',          'path' => '/affectations',                'code' => '200', 'permission' => null, 'reference' => 'affectations',                'is_active' => true],
+                    ['ordre' => 5, 'libelle' => 'Mutations',               'icon' => 'bi bi-arrow-left-right',   'path' => '/mutations',                   'code' => '200', 'permission' => null, 'reference' => 'mutations',                   'is_active' => true],
+                    ['ordre' => 6, 'libelle' => 'Liste des catéchumènes',  'icon' => 'bi bi-person-lines-fill',  'path' => '/catechumenes',                'code' => '200', 'permission' => null, 'reference' => 'catechumenes',                'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Gestion des présences',
-                'icon'      => 'bi bi-calendar-check',
-                'path'      => '#',
-                'reference' => 'main_presences',
-                'ordre'     => 3,
-                'sousMenus' => [
-                    ['libelle' => 'Séances', 'path' => '/seances', 'reference' => 'seances', 'icon' => 'bi bi-calendar3', 'ordre' => 1],
+                'ordre'      => 3,
+                'libelle'    => 'Gestion présences',
+                'icon'       => 'bi bi-calendar-check',
+                'path'       => '#',
+                'code'       => '300',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_presences',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Séances', 'icon' => 'bi bi-calendar-event', 'path' => '/seances', 'code' => '300', 'permission' => null, 'reference' => 'seances', 'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Évaluations',
-                'icon'      => 'bi bi-journal-check',
-                'path'      => '#',
-                'reference' => 'main_evaluations',
-                'ordre'     => 4,
-                'sousMenus' => [
-                    ['libelle' => 'Évaluations',    'path' => '/evaluations',     'reference' => 'evaluations',     'icon' => 'bi bi-pencil-square', 'ordre' => 1],
-                    ['libelle' => 'Notes',          'path' => '/notes',           'reference' => 'notes',           'icon' => 'bi bi-123',           'ordre' => 2],
-                    ['libelle' => 'Bilans annuels', 'path' => '/bilans-annuels',  'reference' => 'bilans_annuels',  'icon' => 'bi bi-trophy',        'ordre' => 3],
-                    ['libelle' => 'Bulletins',      'path' => '/bulletins',       'reference' => 'bulletins',       'icon' => 'bi bi-file-earmark-spreadsheet', 'ordre' => 4],
+                'ordre'      => 4,
+                'libelle'    => 'Évaluations',
+                'icon'       => 'bi bi-clipboard-check',
+                'path'       => '#',
+                'code'       => '400',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_evaluations',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Évaluations',    'icon' => 'bi bi-clipboard2-check',        'path' => '/evaluations',    'code' => '400', 'permission' => null, 'reference' => 'evaluations',    'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Notes',          'icon' => 'bi bi-pencil-square',           'path' => '/notes',          'code' => '400', 'permission' => null, 'reference' => 'notes',          'is_active' => true],
+                    ['ordre' => 3, 'libelle' => 'Bilans annuels', 'icon' => 'bi bi-file-earmark-text',       'path' => '/bilans-annuels', 'code' => '400', 'permission' => null, 'reference' => 'bilans_annuels', 'is_active' => true],
+                    ['ordre' => 4, 'libelle' => 'Bulletins',      'icon' => 'bi bi-file-earmark-bar-graph',  'path' => '/bulletins',      'code' => '400', 'permission' => null, 'reference' => 'bulletins',      'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Sacrements',
-                'icon'      => 'bi bi-award',
-                'path'      => '#',
-                'reference' => 'main_sacrements',
-                'ordre'     => 5,
-                'sousMenus' => [
-                    ['libelle' => 'Baptême',               'path' => '/sacrements/bapteme',            'reference' => 'sacrement_bapteme',            'icon' => 'bi bi-droplet',     'ordre' => 1],
-                    ['libelle' => 'Première Communion',    'path' => '/sacrements/premiere-communion', 'reference' => 'sacrement_premiere_communion', 'icon' => 'bi bi-brightness-high', 'ordre' => 2],
-                    ['libelle' => 'Confirmation',          'path' => '/sacrements/confirmation',       'reference' => 'sacrement_confirmation',       'icon' => 'bi bi-fire',        'ordre' => 3],
-                    ['libelle' => 'Exceptions pastorales', 'path' => '/sacrements/exceptions',         'reference' => 'sacrement_exceptions',         'icon' => 'bi bi-shield-exclamation', 'ordre' => 4],
+                'ordre'      => 5,
+                'libelle'    => 'Sacrements',
+                'icon'       => 'bi bi-droplet-half',
+                'path'       => '#',
+                'code'       => '500',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_sacrements',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Baptême',               'icon' => 'bi bi-droplet',             'path' => '/sacrements/bapteme',               'code' => '500', 'permission' => null, 'reference' => 'bapteme',               'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Première Communion',    'icon' => 'bi bi-cup-hot',             'path' => '/sacrements/premiere-communion',    'code' => '500', 'permission' => null, 'reference' => 'premiere_communion',    'is_active' => true],
+                    ['ordre' => 3, 'libelle' => 'Confirmation',          'icon' => 'bi bi-patch-check',         'path' => '/sacrements/confirmation',          'code' => '500', 'permission' => null, 'reference' => 'confirmation',          'is_active' => true],
+                    ['ordre' => 4, 'libelle' => 'Exceptions pastorales', 'icon' => 'bi bi-exclamation-diamond', 'path' => '/sacrements/exceptions-pastorales', 'code' => '500', 'permission' => null, 'reference' => 'exceptions_pastorales', 'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Finances',
-                'icon'      => 'bi bi-cash-stack',
-                'path'      => '#',
-                'reference' => 'main_finances',
-                'ordre'     => 6,
-                'sousMenus' => [
-                    ['libelle' => 'Tarification',           'path' => '/tarifs',               'reference' => 'tarification',           'icon' => 'bi bi-tags',          'ordre' => 1],
-                    ['libelle' => 'Opérations financières', 'path' => '/operations-paiements', 'reference' => 'operations_financieres', 'icon' => 'bi bi-wallet2',       'ordre' => 2],
-                    ['libelle' => 'Caisse',                 'path' => '/caisse-paroissiale',   'reference' => 'caisse_paroissiale',     'icon' => 'bi bi-safe',          'ordre' => 3],
-                    ['libelle' => 'Versements',             'path' => '/versements',           'reference' => 'versements',             'icon' => 'bi bi-bank',          'ordre' => 4],
+                'ordre'      => 6,
+                'libelle'    => 'Finances',
+                'icon'       => 'bi bi-cash-stack',
+                'path'       => '#',
+                'code'       => '600',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_finances',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Tarification',           'icon' => 'bi bi-tags',      'path' => '/tarifications',         'code' => '600', 'permission' => null, 'reference' => 'tarifications',         'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Opérations financières', 'icon' => 'bi bi-arrow-repeat', 'path' => '/operations-financieres', 'code' => '600', 'permission' => null, 'reference' => 'operations_financieres', 'is_active' => true],
+                    ['ordre' => 3, 'libelle' => 'Caisse',                 'icon' => 'bi bi-safe',      'path' => '/caisse',                'code' => '600', 'permission' => null, 'reference' => 'caisse',                 'is_active' => true],
+                    ['ordre' => 4, 'libelle' => 'Versements',             'icon' => 'bi bi-cash-coin', 'path' => '/versements',            'code' => '600', 'permission' => null, 'reference' => 'versements',             'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Communication',
-                'icon'      => 'bi bi-chat-dots',
-                'path'      => '#',
-                'reference' => 'main_communication',
-                'ordre'     => 7,
-                'sousMenus' => [
-                    ['libelle' => 'SMS',           'path' => '/communication/sms', 'reference' => 'communication_sms', 'icon' => 'bi bi-phone',     'ordre' => 1],
-                    ['libelle' => 'Notifications', 'path' => '/notifications-log', 'reference' => 'notifications_log', 'icon' => 'bi bi-bell',      'ordre' => 2],
+                'ordre'      => 7,
+                'libelle'    => 'Communication',
+                'icon'       => 'bi bi-chat-dots',
+                'path'       => '#',
+                'code'       => '700',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_communication',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'SMS',           'icon' => 'bi bi-phone', 'path' => '/sms',           'code' => '700', 'permission' => null, 'reference' => 'sms',           'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Notifications', 'icon' => 'bi bi-bell',  'path' => '/notifications', 'code' => '700', 'permission' => null, 'reference' => 'notifications', 'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Impressions',
-                'icon'      => 'bi bi-printer',
-                'path'      => '#',
-                'reference' => 'main_impressions',
-                'ordre'     => 8,
-                'sousMenus' => [
-                    ['libelle' => 'Fiche de notes',                          'path' => '/impressions/fiche-notes',                'reference' => 'imp_fiche_notes',                'icon' => 'bi bi-file-earmark-ruled', 'ordre' => 1],
-                    ['libelle' => 'Liste de présence',                       'path' => '/impressions/liste-presence',             'reference' => 'imp_liste_presence',             'icon' => 'bi bi-file-earmark-check', 'ordre' => 2],
-                    ['libelle' => 'Fiche de bilan annuel',                   'path' => '/impressions/fiche-bilan-annuel',         'reference' => 'imp_fiche_bilan_annuel',         'icon' => 'bi bi-file-earmark-text',  'ordre' => 3],
-                    ['libelle' => 'Fiche de suivi sacramentel',              'path' => '/impressions/suivi-sacramental',          'reference' => 'imp_suivi_sacramental',          'icon' => 'bi bi-journal-bookmark',   'ordre' => 4],
-                    ['libelle' => 'Fiche de renseignements Baptême',         'path' => '/impressions/fiche-bapteme',              'reference' => 'imp_fiche_bapteme',              'icon' => 'bi bi-file-person',        'ordre' => 5],
-                    ['libelle' => 'Fiche de renseignements 1ère Communion',  'path' => '/impressions/fiche-premiere-communion',   'reference' => 'imp_fiche_premiere_communion',   'icon' => 'bi bi-file-person',        'ordre' => 6],
-                    ['libelle' => 'Fiche de renseignements Confirmation',    'path' => '/impressions/fiche-confirmation',         'reference' => 'imp_fiche_confirmation',         'icon' => 'bi bi-file-person',        'ordre' => 7],
+                'ordre'      => 8,
+                'libelle'    => 'Impressions',
+                'icon'       => 'bi bi-printer',
+                'path'       => '#',
+                'code'       => '800',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_impressions',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Fiche de notes',      'icon' => 'bi bi-file-earmark-text',       'path' => '/impressions/fiche-notes',                     'code' => '800', 'permission' => null, 'reference' => 'fiche_notes',                      'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Liste de présence',   'icon' => 'bi bi-list-check',              'path' => '/impressions/liste-presence',                  'code' => '800', 'permission' => null, 'reference' => 'liste_presence',                   'is_active' => true],
+                    ['ordre' => 3, 'libelle' => 'Fiche bilan',         'icon' => 'bi bi-file-earmark-bar-graph',  'path' => '/impressions/bilan-annuel',                    'code' => '800', 'permission' => null, 'reference' => 'fiche_bilan_annuel',              'is_active' => true],
+                    ['ordre' => 4, 'libelle' => 'Fiche sacramentel',   'icon' => 'bi bi-clipboard-pulse',         'path' => '/impressions/suivi-sacramentel',               'code' => '800', 'permission' => null, 'reference' => 'fiche_suivi_sacramentel',          'is_active' => true],
+                    ['ordre' => 5, 'libelle' => 'Fiche Baptême',       'icon' => 'bi bi-file-earmark-person',     'path' => '/impressions/renseignements-bapteme',          'code' => '800', 'permission' => null, 'reference' => 'renseignements_bapteme',          'is_active' => true],
+                    ['ordre' => 6, 'libelle' => 'Fiche Communion',     'icon' => 'bi bi-file-earmark-person',     'path' => '/impressions/renseignements-premiere-communion','code' => '800', 'permission' => null, 'reference' => 'renseignements_premiere_communion','is_active' => true],
+                    ['ordre' => 7, 'libelle' => 'Fiche Confirmation',  'icon' => 'bi bi-file-earmark-person',     'path' => '/impressions/renseignements-confirmation',     'code' => '800', 'permission' => null, 'reference' => 'renseignements_confirmation',     'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Documents officiels',
-                'icon'      => 'bi bi-file-earmark-text',
-                'path'      => '#',
-                'reference' => 'main_documents',
-                'ordre'     => 9,
-                'sousMenus' => [
-                    ['libelle' => 'Modèles de documents',    'path' => '/documents/modeles',    'reference' => 'modeles_documents',    'icon' => 'bi bi-layout-text-window', 'ordre' => 1],
-                    ['libelle' => 'Génération de documents', 'path' => '/documents/generation', 'reference' => 'generation_documents', 'icon' => 'bi bi-file-earmark-arrow-down', 'ordre' => 2],
+                'ordre'      => 9,
+                'libelle'    => 'Documents',
+                'icon'       => 'bi bi-file-earmark-richtext',
+                'path'       => '#',
+                'code'       => '900',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_documents_officiels',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Modèles documents',    'icon' => 'bi bi-file-earmark',      'path' => '/modeles-documents',    'code' => '900', 'permission' => null, 'reference' => 'modeles_documents',    'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Génération documents', 'icon' => 'bi bi-file-earmark-plus', 'path' => '/generation-documents', 'code' => '900', 'permission' => null, 'reference' => 'generation_documents', 'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Rapports & Statistiques',
-                'icon'      => 'bi bi-bar-chart-line',
-                'path'      => '#',
-                'reference' => 'main_rapports',
-                'ordre'     => 10,
-                'sousMenus' => [
-                    ['libelle' => 'Statistiques', 'path' => '/statistiques', 'reference' => 'statistiques', 'icon' => 'bi bi-pie-chart', 'ordre' => 1],
-                    ['libelle' => 'Rapports',     'path' => '/rapports',     'reference' => 'rapports',     'icon' => 'bi bi-graph-up',  'ordre' => 2],
+                'ordre'      => 10,
+                'libelle'    => 'Rapports',
+                'icon'       => 'bi bi-file-earmark-bar-graph',
+                'path'       => '/rapports',
+                'code'       => '1000',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_rapports_statistiques',
+                'is_active'  => true,
+                'sousMenus'  => [],
+            ],
+            [
+                'ordre'      => 11,
+                'libelle'    => 'Organisation',
+                'icon'       => 'bi bi-building',
+                'path'       => '#',
+                'code'       => '1100',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_organisation',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1,  'libelle' => 'Années pastorales',        'icon' => 'bi bi-calendar-range',   'path' => '/annees-pastorales',        'code' => '1100', 'permission' => null, 'reference' => 'annees_pastorales',        'is_active' => true],
+                    ['ordre' => 2,  'libelle' => 'Sections',                 'icon' => 'bi bi-diagram-2',        'path' => '/sections',                 'code' => '1100', 'permission' => null, 'reference' => 'sections',                 'is_active' => true],
+                    ['ordre' => 3,  'libelle' => 'Niveaux',                  'icon' => 'bi bi-layers',           'path' => '/niveaux',                  'code' => '1100', 'permission' => null, 'reference' => 'niveaux',                  'is_active' => true],
+                    ['ordre' => 4,  'libelle' => 'Classes',                  'icon' => 'bi bi-door-open',        'path' => '/classes',                  'code' => '1100', 'permission' => null, 'reference' => 'classes',                  'is_active' => true],
+                    ['ordre' => 5,  'libelle' => 'Animateurs',               'icon' => 'bi bi-person-workspace', 'path' => '/animateurs',               'code' => '1100', 'permission' => null, 'reference' => 'animateurs',               'is_active' => true],
+                    ['ordre' => 6,  'libelle' => 'Affectation animateurs',   'icon' => 'bi bi-person-check',     'path' => '/affectations-animateurs',  'code' => '1100', 'permission' => null, 'reference' => 'affectations_animateurs',   'is_active' => true],
+                    ['ordre' => 7,  'libelle' => 'CEB',                      'icon' => 'bi bi-house-heart',      'path' => '/cebs',                     'code' => '1100', 'permission' => null, 'reference' => 'cebs',                      'is_active' => true],
+                    ['ordre' => 8,  'libelle' => 'Mouvements',               'icon' => 'bi bi-people-fill',      'path' => '/mouvements',               'code' => '1100', 'permission' => null, 'reference' => 'mouvements',               'is_active' => true],
+                    ['ordre' => 9,  'libelle' => 'Calendrier',               'icon' => 'bi bi-calendar3',        'path' => '/calendrier',               'code' => '1100', 'permission' => null, 'reference' => 'calendrier',               'is_active' => true],
+                    ['ordre' => 10, 'libelle' => 'Modules trimestriels',     'icon' => 'bi bi-calendar3-range',  'path' => '/modules-trimestriels',     'code' => '1100', 'permission' => null, 'reference' => 'modules_trimestriels',     'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Organisation',
-                'icon'      => 'bi bi-diagram-3',
-                'path'      => '#',
-                'reference' => 'main_organisation',
-                'ordre'     => 11,
-                'sousMenus' => [
-                    ['libelle' => 'Années pastorales',           'path' => '/annee-catecheses',        'reference' => 'annee_catecheses',        'icon' => 'bi bi-calendar-range', 'ordre' => 1],
-                    ['libelle' => 'Sections',                    'path' => '/sections',                'reference' => 'sections',                'icon' => 'bi bi-folder2-open',   'ordre' => 2],
-                    ['libelle' => 'Niveaux',                     'path' => '/niveaux',                 'reference' => 'niveaux',                 'icon' => 'bi bi-layers',         'ordre' => 3],
-                    ['libelle' => 'Classes',                     'path' => '/classes',                 'reference' => 'classes',                 'icon' => 'bi bi-easel',          'ordre' => 4],
-                    ['libelle' => 'Animateurs',                  'path' => '/animateurs',              'reference' => 'animateurs',              'icon' => 'bi bi-person-badge',   'ordre' => 5],
-                    ['libelle' => 'Affectation des animateurs',  'path' => '/affectations-animateurs', 'reference' => 'affectations_animateurs', 'icon' => 'bi bi-person-check',   'ordre' => 6],
-                    ['libelle' => 'CEB',                         'path' => '/cebs',                    'reference' => 'cebs',                    'icon' => 'bi bi-house-door',     'ordre' => 7],
-                    ['libelle' => 'Mouvements',                  'path' => '/mouvements',              'reference' => 'mouvements',              'icon' => 'bi bi-flag',           'ordre' => 8],
-                    ['libelle' => 'Calendrier',                  'path' => '/activites',               'reference' => 'calendrier_activites',    'icon' => 'bi bi-calendar4-week', 'ordre' => 9],
-                    ['libelle' => 'Modules trimestriels',        'path' => '/modules-trimestriels',    'reference' => 'modules_trimestriels',    'icon' => 'bi bi-grid-3x3',       'ordre' => 10],
+                'ordre'      => 12,
+                'libelle'    => 'Utilisateurs & Sécurité',
+                'icon'       => 'bi bi-shield-lock',
+                'path'       => '#',
+                'code'       => '1300',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_utilisateurs_securite',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Utilisateurs', 'icon' => 'bi bi-person-fill',        'path' => '/utilisateurs', 'code' => '1300', 'permission' => null, 'reference' => 'utilisateurs', 'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Profils',      'icon' => 'bi bi-shield-fill-check',  'path' => '/profils',      'code' => '1300', 'permission' => null, 'reference' => 'profils',      'is_active' => true],
                 ],
             ],
             [
-                'libelle'   => 'Utilisateurs & Sécurité',
-                'icon'      => 'bi bi-shield-lock',
-                'path'      => '#',
-                'reference' => 'main_users_security',
-                'ordre'     => 12,
-                'sousMenus' => [
-                    ['libelle' => 'Utilisateurs', 'path' => '/users',   'reference' => 'utilisateurs', 'icon' => 'bi bi-people-fill', 'ordre' => 1],
-                    ['libelle' => 'Profils',      'path' => '/profils', 'reference' => 'profils',      'icon' => 'bi bi-person-gear', 'ordre' => 2],
-                ],
-            ],
-            [
-                'libelle'   => 'Paramètres',
-                'icon'      => 'bi bi-gear',
-                'path'      => '#',
-                'reference' => 'main_settings',
-                'ordre'     => 13,
-                'sousMenus' => [
-                    ['libelle' => 'Configuration de la paroisse', 'path' => '/paroisse-configuration', 'reference' => 'paroisse_config',      'icon' => 'bi bi-building',   'ordre' => 1],
-                    ['libelle' => 'Responsables de la paroisse',  'path' => '/responsables-paroisse',  'reference' => 'responsables_paroisse', 'icon' => 'bi bi-person-lines-fill', 'ordre' => 2],
-                    ['libelle' => 'Apparence',                    'path' => '/apparence-configuration', 'reference' => 'apparence_config',     'icon' => 'bi bi-palette',    'ordre' => 3],
-                    ['libelle' => 'Sauvegardes',                  'path' => '/sauvegardes',             'reference' => 'sauvegardes',           'icon' => 'bi bi-hdd-network','ordre' => 4],
+                'ordre'      => 13,
+                'libelle'    => 'Paramètres',
+                'icon'       => 'bi bi-gear-wide-connected',
+                'path'       => '#',
+                'code'       => '1400',
+                'permission' => '1,2,3,4',
+                'reference'  => 'main_parametres',
+                'is_active'  => true,
+                'sousMenus'  => [
+                    ['ordre' => 1, 'libelle' => 'Configuration', 'icon' => 'bi bi-building-gear',  'path' => '/parametres/configuration', 'code' => '1400', 'permission' => null, 'reference' => 'configuration_paroisse', 'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Sauvegardes',    'icon' => 'bi bi-database-down',   'path' => '/parametres/sauvegardes',    'code' => '1400', 'permission' => null, 'reference' => 'sauvegardes',            'is_active' => true],
                 ],
             ],
         ];
 
+        $existingReferences = [];
+
         foreach ($menusStructure as $menuData) {
             $sousMenus = $menuData['sousMenus'] ?? [];
             unset($menuData['sousMenus']);
+
+            $existingReferences[] = $menuData['reference'];
 
             $menu = Menu::updateOrCreate(
                 ['reference' => $menuData['reference']],
@@ -189,12 +228,17 @@ class MenuSeeder extends Seeder
             );
 
             foreach ($sousMenus as $smData) {
+                $existingReferences[] = $smData['reference'];
                 $smData['parent_id'] = $menu->id;
+
                 Menu::updateOrCreate(
                     ['reference' => $smData['reference']],
                     $smData
                 );
             }
         }
+
+        // Nettoyage des anciens menus obsolètes qui ne font plus partie du référentiel
+        Menu::whereNotIn('reference', $existingReferences)->forceDelete();
     }
 }

@@ -54,6 +54,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Inactivity Timeout Minutes
+    |--------------------------------------------------------------------------
+    |
+    | Déconnexion et révocation automatique du jeton d'accès après N minutes
+    | d'inactivité (dernière utilisation). Valeur par défaut : 10 minutes.
+    |
+    */
+
+    'inactivity_timeout' => env('SANCTUM_INACTIVITY_TIMEOUT', 10),
+
+    /*
+    |--------------------------------------------------------------------------
     | Token Prefix
     |--------------------------------------------------------------------------
     |

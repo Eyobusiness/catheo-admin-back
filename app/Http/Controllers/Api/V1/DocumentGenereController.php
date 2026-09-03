@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\CatecheseConfigurationResource;
 use App\Http\Resources\Api\V1\DocumentGenereResource;
 use App\Models\AnneeCatechese;
 use App\Models\CatecheseConfiguration;
@@ -10,6 +11,7 @@ use App\Models\Catechumene;
 use App\Models\DocumentGenere;
 use App\Models\InscriptionAnnuelle;
 use App\Models\ModeleDocument;
+use App\Services\ParoisseHeaderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -295,6 +297,56 @@ class DocumentGenereController extends Controller
             'status' => 'success',
             'data'   => new DocumentGenereResource($item->load(['catechumene', 'modeleDocument', 'anneeCatechese', 'user'])),
         ]);
+    }
+
+    /**
+     * Fournit les données prêtes pour l'impression du document officiel par Angular.
+     */
+    public function printData(Request $request, mixed $document): JsonResponse
+    {
+        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        $item = $this->resolveDocument($document);
+
+        if ($paroisseId && $item->paroisse_configuration_id && (int) $paroisseId !== (int) $item->paroisse_configuration_id) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Accès refusé à ce document.',
+            ], 403);
+        }
+
+        $paroisse = CatecheseConfiguration::find($item->paroisse_configuration_id)
+            ?? CatecheseConfiguration::find($paroisseId)
+            ?? CatecheseConfiguration::firstOrFail();
+
+        $item->loadMissing(['catechumene', 'modeleDocument', 'anneeCatechese', 'user']);
+
+        $headerService = app(ParoisseHeaderService::class);
+        $entete = $headerService->getHeaderData($paroisse, $item->anneeCatechese);
+
+        return response()->json([
+            'status'   => 'success',
+            'entete'   => $entete,
+            'paroisse' => new CatecheseConfigurationResource($paroisse),
+            'document' => new DocumentGenereResource($item),
+            'modele'   => $item->modeleDocument,
+            'print_payload' => [
+                'titre'              => $item->titre_document ?? $item->modeleDocument?->titre ?? 'Document Officiel',
+                'reference'          => $item->reference_document,
+                'contenu_html'       => $item->contenu_genere,
+                'date_generation'    => $item->date_generation?->format('d/m/Y') ?? now()->format('d/m/Y'),
+                'type_document'      => $item->type_document,
+                'signataire_nom'     => $item->signataire_nom ?? $paroisse->cure_nom,
+                'signataire_qualite' => $item->signataire_qualite ?? 'Le Curé de la Paroisse',
+            ],
+        ]);
+    }
+
+    /**
+     * Alias de compatibilité retournant les données d'impression en JSON.
+     */
+    public function pdf(Request $request, mixed $document): JsonResponse
+    {
+        return $this->printData($request, $document);
     }
 
     /**

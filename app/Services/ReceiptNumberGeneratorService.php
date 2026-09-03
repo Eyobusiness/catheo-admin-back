@@ -29,11 +29,14 @@ class ReceiptNumberGeneratorService
             $prefix = 'REC';
         }
 
-        // 2. Année sur 2 chiffres et Heure HHmmss
+        // 2. Année sur 2 chiffres et Heure HHmmss (ex: 124002)
         $timestamp = $date ? (is_string($date) ? strtotime($date) : $date->getTimestamp()) : time();
         $anneeCourt = date('y', $timestamp);
         $anneeComplete = date('Y', $timestamp);
-        $heureStr = date('His', $timestamp);
+
+        // Si la date passée n'inclut pas d'heure précise (ex: '2026-09-01'), on utilise l'heure/minute/seconde courante
+        $hasSpecificTime = $date instanceof DateTimeInterface || ($date && is_string($date) && str_contains($date, ':'));
+        $heureStr = $hasSpecificTime ? date('His', $timestamp) : date('His');
 
         // 3. Calcul atomique et transactionnel du numéro séquentiel (réinitialisé chaque année par paroisse)
         $nextSequence = $this->resolveNextSequence($paroisseId, $anneeComplete, $anneeCourt);

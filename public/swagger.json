@@ -57,12 +57,12 @@
             "description": "KPIs, synthèses et statistiques de gestion"
         },
         {
-            "name": "11. Impressions & Fiches Officiels",
-            "description": "Génération des fiches officielles, bilans annuels et sacrements"
+            "name": "11. Impressions & Fiches Officielles (Données JSON)",
+            "description": "Fourniture des données structurées JSON pour le rendu et l'impression côté frontend Angular (Reçus, Fiches catéchumènes, Feuilles d'émargement, Bilans pastoraux, Sacrements)"
         },
         {
             "name": "12. Exportations de Données",
-            "description": "Exportations de données au format Excel / PDF"
+            "description": "Exportations de données tabulaires (Excel / CSV)"
         }
     ],
     "components": {
@@ -22044,6 +22044,1506 @@
                 "responses": {
                     "200": {
                         "description": "Sacrement supprimé"
+                    }
+                }
+            }
+        },
+        "/paiements/{uuid}/pdf": {
+            "get": {
+                "tags": [
+                    "8. Finances & Encaissements",
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Télécharger ou visualiser le reçu officiel de paiement en PDF",
+                "description": "Génère le reçu officiel de paiement au format PDF (A5 Paysage) avec numéro de reçu unique, détails des frais, et visa paroissial.",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "description": "UUID ou Numéro de reçu ou ID du paiement",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès refusé - Paiement d'une autre paroisse"
+                    },
+                    "404": {
+                        "description": "Paiement introuvable"
+                    }
+                }
+            }
+        },
+        "/paiements/{uuid}/recu-pdf": {
+            "get": {
+                "tags": [
+                    "8. Finances & Encaissements",
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Alias pour le reçu officiel de paiement en PDF",
+                "description": "Génère le reçu officiel de paiement au format PDF.",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "description": "UUID ou Numéro de reçu ou ID du paiement",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès refusé"
+                    },
+                    "404": {
+                        "description": "Paiement introuvable"
+                    }
+                }
+            }
+        },
+        "/catechumenes/{catechumene}/pdf": {
+            "get": {
+                "tags": [
+                    "6. Préinscriptions & Catéchumènes",
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Télécharger ou visualiser la fiche individuelle du catéchumène en PDF",
+                "description": "Génère la fiche individuelle complète du catéchumène (A4 Portrait) avec photo, matricule permanent, filiation, antécédents sacramentaux et inscription active.",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "catechumene",
+                        "in": "path",
+                        "required": true,
+                        "description": "UUID ou Matricule ou ID du catéchumène",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID de l'année pastorale (optionnel, prend l'année active par défaut)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès refusé - Catéchumène d'une autre paroisse"
+                    },
+                    "404": {
+                        "description": "Catéchumène introuvable"
+                    }
+                }
+            }
+        },
+        "/dashboard/rapport-annuel/pdf": {
+            "get": {
+                "tags": [
+                    "10. Tableaux de Bord & Statistiques",
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Générer le Rapport Annuel Pastoral & Administratif en PDF",
+                "description": "Génère le rapport statistique et pastoral annuel complet au format PDF (A4 Portrait) avec synthèse générale des effectifs, état des sacrements (Baptêmes, Communions, Confirmations) et ventilations par section, niveau et classe.",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID de l'année pastorale (optionnel, prend l'année active par défaut)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès refusé"
+                    },
+                    "404": {
+                        "description": "Année pastorale introuvable"
+                    }
+                }
+            }
+        },
+        "/rapports/annuel/pdf": {
+            "get": {
+                "tags": [
+                    "10. Tableaux de Bord & Statistiques",
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Alias direct pour le Rapport Annuel Pastoral & Administratif en PDF",
+                "description": "Génère le rapport annuel pastoral au format PDF.",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID de l'année pastorale",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Année introuvable"
+                    }
+                }
+            }
+        },
+        "/impressions/fiche-notes/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de notes pédagogique en PDF",
+                "description": "Génère la fiche de notes des catéchumènes pour une classe ou un niveau au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de notes pédagogique en PDF (POST)",
+                "description": "Génère la fiche de notes des catéchumènes pour une classe ou un niveau au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/fiche-presences/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de présences en PDF",
+                "description": "Génère la feuille d'appel et de présence pour une classe au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de présences en PDF (POST)",
+                "description": "Génère la feuille d'appel et de présence pour une classe au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/liste-presence/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Registre de présence en PDF",
+                "description": "Génère le registre de présence avec colonnes des séances au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Registre de présence en PDF (POST)",
+                "description": "Génère le registre de présence avec colonnes des séances au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/liste-catechumenes/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Registre officiel des catéchumènes en PDF",
+                "description": "Génère la liste officielle des catéchumènes inscrits au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Registre officiel des catéchumènes en PDF (POST)",
+                "description": "Génère la liste officielle des catéchumènes inscrits au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/suivi-sacramental/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de suivi des sacrements en PDF",
+                "description": "Génère la fiche de suivi sacramental (Baptêmes, Communions, Confirmations) au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de suivi des sacrements en PDF (POST)",
+                "description": "Génère la fiche de suivi sacramental (Baptêmes, Communions, Confirmations) au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/fiche-bilan-annuel/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de bilan annuel de la catéchèse en PDF",
+                "description": "Génère le bilan annuel d'évaluation et de passage au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiche de bilan annuel de la catéchèse en PDF (POST)",
+                "description": "Génère le bilan annuel d'évaluation et de passage au format PDF (A4 Paysage).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/fiche-renseignement-bapteme/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiches de renseignement Baptême en PDF",
+                "description": "Génère les fiches individuelles de renseignement pour le sacrement de Baptême au format PDF (A4 Portrait).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiches de renseignement Baptême en PDF (POST)",
+                "description": "Génère les fiches individuelles de renseignement pour le sacrement de Baptême au format PDF (A4 Portrait).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/fiche-renseignement-premiere-communion/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiches de renseignement Première Communion en PDF",
+                "description": "Génère les fiches individuelles de renseignement pour la Première Communion au format PDF (A4 Portrait).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiches de renseignement Première Communion en PDF (POST)",
+                "description": "Génère les fiches individuelles de renseignement pour la Première Communion au format PDF (A4 Portrait).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/impressions/fiche-renseignement-confirmation/pdf": {
+            "get": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiches de renseignement Confirmation en PDF",
+                "description": "Génère les fiches individuelles de renseignement pour la Confirmation au format PDF (A4 Portrait).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la classe"
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID du niveau"
+                    },
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de la section"
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID ou ID de l'année pastorale"
+                    },
+                    {
+                        "name": "sacrament",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "bapteme",
+                                "premiere_communion",
+                                "confirmation"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Fiches de renseignement Confirmation en PDF (POST)",
+                "description": "Génère les fiches individuelles de renseignement pour la Confirmation au format PDF (A4 Portrait).",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "classe_id": {
+                                        "type": "string"
+                                    },
+                                    "niveau_id": {
+                                        "type": "string"
+                                    },
+                                    "section_id": {
+                                        "type": "string"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string"
+                                    },
+                                    "sacrament": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Non authentifié"
+                    }
+                }
+            }
+        },
+        "/documents-generes/{document}/pdf": {
+            "get": {
+                "tags": [
+                    "12. Modèles & Documents Officiels",
+                    "11. Impressions & Documents PDF"
+                ],
+                "summary": "Télécharger le document officiel généré (Certificat, Attestation) en PDF",
+                "description": "Génère le document officiel (Certificat, Attestation, Carte, etc.) au format PDF (A4 Portrait/Paysage) avec sceau paroissial et référence officielle.",
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "document",
+                        "in": "path",
+                        "required": true,
+                        "description": "UUID ou Référence ou ID du document généré",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Flux binaire du fichier PDF généré avec entête et en-têtes HTTP de téléchargement/visualisation inline",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès refusé"
+                    },
+                    "404": {
+                        "description": "Document généré introuvable"
                     }
                 }
             }

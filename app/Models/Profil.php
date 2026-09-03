@@ -83,8 +83,8 @@ class Profil extends Model
      */
     public function hasPermission(string $permission): bool
     {
-        // 1. Super Admin : accès total
-        if ($this->is_system && ($this->code === 'SUPER_ADMIN' || in_array('*', (array) $this->permissions, true))) {
+        // 1. Super Admin & Admin : accès total
+        if ($this->is_system && (in_array($this->code, ['SUPER_ADMIN', 'ADMIN'], true) || in_array('*', (array) $this->permissions, true))) {
             return true;
         }
 
@@ -111,7 +111,7 @@ class Profil extends Model
      */
     public function hasMenuActionPermission(string $menuReference, string $action): bool
     {
-        if ($this->is_system && ($this->code === 'SUPER_ADMIN' || in_array('*', (array) $this->permissions, true))) {
+        if ($this->is_system && (in_array($this->code, ['SUPER_ADMIN', 'ADMIN'], true) || in_array('*', (array) $this->permissions, true))) {
             return true;
         }
 
@@ -157,7 +157,7 @@ class Profil extends Model
      */
     public function getAccessibleMenusTree(): array
     {
-        $isSuperAdmin = $this->is_system && ($this->code === 'SUPER_ADMIN' || in_array('*', (array) $this->permissions, true));
+        $isFullAccess = $this->is_system && (in_array($this->code, ['SUPER_ADMIN', 'ADMIN'], true) || in_array('*', (array) $this->permissions, true));
         $allPermissions = $this->menuPermissions()->with('menu')->get()->keyBy('menu_id');
 
         $rootMenus = Menu::roots()->where('is_active', true)->with(['sousMenus' => function ($q) {
@@ -169,7 +169,7 @@ class Profil extends Model
         foreach ($rootMenus as $root) {
             $rootPivot = $allPermissions->get($root->id);
 
-            $rootPerms = $isSuperAdmin ? [
+            $rootPerms = $isFullAccess ? [
                 'create'       => true,
                 'read'         => true,
                 'update'       => true,
@@ -188,7 +188,7 @@ class Profil extends Model
             $sousMenusList = [];
             foreach ($root->sousMenus as $sousMenu) {
                 $subPivot = $allPermissions->get($sousMenu->id);
-                $subPerms = $isSuperAdmin ? [
+                $subPerms = $isFullAccess ? [
                     'create'       => true,
                     'read'         => true,
                     'update'       => true,
@@ -204,13 +204,17 @@ class Profil extends Model
                     'force_delete' => false,
                 ]);
 
-                // Si le sous-menu a au moins une permission active ou si SuperAdmin
-                if ($isSuperAdmin || in_array(true, $subPerms, true)) {
+                // Si le sous-menu a au moins une permission active ou si SuperAdmin / Admin
+                if ($isFullAccess || in_array(true, $subPerms, true)) {
                     $sousMenusList[] = [
+                        'order'       => $sousMenu->ordre,
+                        'id'          => $sousMenu->uuid,
                         'uuid'        => $sousMenu->uuid,
                         'libelle'     => $sousMenu->libelle,
                         'icon'        => $sousMenu->icon,
                         'path'        => $sousMenu->path,
+                        'code'        => $sousMenu->code ?? '',
+                        'permission'  => $sousMenu->permission,
                         'reference'   => $sousMenu->reference,
                         'ordre'       => $sousMenu->ordre,
                         'permissions' => $subPerms,
@@ -219,17 +223,21 @@ class Profil extends Model
             }
 
             // Si le menu racine a au moins un droit de lecture/action ou des sous-menus accessibles
-            if ($isSuperAdmin || $rootPerms['read'] || in_array(true, $rootPerms, true) || !empty($sousMenusList)) {
+            if ($isFullAccess || $rootPerms['read'] || in_array(true, $rootPerms, true) || !empty($sousMenusList)) {
                 // Si des sous-menus sont autorisés, le parent doit au moins avoir read: true
                 if (!empty($sousMenusList) && !$rootPerms['read']) {
                     $rootPerms['read'] = true;
                 }
 
                 $tree[] = [
+                    'order'       => $root->ordre,
+                    'id'          => $root->uuid,
                     'uuid'        => $root->uuid,
                     'libelle'     => $root->libelle,
                     'icon'        => $root->icon,
                     'path'        => $root->path,
+                    'code'        => $root->code ?? '',
+                    'permission'  => $root->permission,
                     'reference'   => $root->reference,
                     'ordre'       => $root->ordre,
                     'permissions' => $rootPerms,

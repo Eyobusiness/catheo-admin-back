@@ -257,6 +257,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/preinscriptions/{preinscription}', [PreinscriptionController::class, 'show']);
         Route::get('/catechumenes/matricule/{code}', [CatechumeneController::class, 'showByMatricule']);
         Route::get('/catechumenes', [CatechumeneController::class, 'index']);
+        Route::get('/catechumenes/{catechumene}/fiche-impression', [CatechumeneController::class, 'ficheImpression']);
+        Route::get('/catechumenes/{catechumene}/pdf', [CatechumeneController::class, 'ficheImpression']);
         Route::get('/catechumenes/{catechumene}', [CatechumeneController::class, 'show']);
         Route::get('/inscriptions-annuelles', [InscriptionAnnuelleController::class, 'index']);
         Route::get('/inscriptions-annuelles/{inscription}', [InscriptionAnnuelleController::class, 'show']);
@@ -385,6 +387,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─────────────────────────────────────────────────────────────────
     Route::middleware('permission:finances.view')->group(function () {
         Route::get('/paiements', [PaiementController::class, 'index']);
+        Route::get('/paiements/{uuid}/recu', [PaiementController::class, 'recu']);
+        Route::get('/paiements/{uuid}/recu-impression', [PaiementController::class, 'recu']);
+        Route::get('/paiements/{uuid}/pdf', [PaiementController::class, 'recu']);
+        Route::get('/paiements/{uuid}/recu-pdf', [PaiementController::class, 'recu']);
         Route::get('/paiements/{uuid}', [PaiementController::class, 'show']);
         Route::get('/tarifs', [TarifController::class, 'index']);
         Route::get('/tarifs/{tarif}', [TarifController::class, 'show']);
@@ -466,21 +472,32 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/effectifs', [DashboardController::class, 'effectifs']);
             Route::get('/finances', [DashboardController::class, 'finances']);
             Route::get('/bilan-annuel/{anneeCatecheseId?}', [DashboardController::class, 'bilanAnnuel']);
+            Route::get('/rapport-annuel/pdf', [DashboardController::class, 'rapportAnnuelPdf']);
         });
         Route::get('/bilan-annuel/{anneeCatecheseId?}', [DashboardController::class, 'bilanAnnuel']);
+        Route::get('/rapports/annuel/pdf', [DashboardController::class, 'rapportAnnuelPdf']);
     });
 
     Route::prefix('impressions')->group(function () {
         Route::match(['get', 'post'], '/entete', [ImpressionController::class, 'entete']);
         Route::match(['get', 'post'], '/fiche-notes', [ImpressionController::class, 'ficheNotes']);
+        Route::match(['get', 'post'], '/fiche-notes/pdf', [ImpressionController::class, 'ficheNotes']);
         Route::match(['get', 'post'], '/fiche-presences', [ImpressionController::class, 'fichePresences']);
+        Route::match(['get', 'post'], '/fiche-presences/pdf', [ImpressionController::class, 'fichePresences']);
         Route::match(['get', 'post'], '/liste-presence', [ImpressionController::class, 'listePresence']);
+        Route::match(['get', 'post'], '/liste-presence/pdf', [ImpressionController::class, 'listePresence']);
         Route::match(['get', 'post'], '/liste-catechumenes', [ImpressionController::class, 'listeCatechumenes']);
+        Route::match(['get', 'post'], '/liste-catechumenes/pdf', [ImpressionController::class, 'listeCatechumenes']);
         Route::match(['get', 'post'], '/suivi-sacramental', [ImpressionController::class, 'suiviSacramental']);
+        Route::match(['get', 'post'], '/suivi-sacramental/pdf', [ImpressionController::class, 'suiviSacramental']);
         Route::match(['get', 'post'], '/fiche-bilan-annuel', [ImpressionController::class, 'ficheBilanAnnuel']);
+        Route::match(['get', 'post'], '/fiche-bilan-annuel/pdf', [ImpressionController::class, 'ficheBilanAnnuel']);
         Route::match(['get', 'post'], '/fiche-renseignement-bapteme', [ImpressionController::class, 'ficheRenseignementBapteme']);
+        Route::match(['get', 'post'], '/fiche-renseignement-bapteme/pdf', [ImpressionController::class, 'ficheRenseignementBapteme']);
         Route::match(['get', 'post'], '/fiche-renseignement-premiere-communion', [ImpressionController::class, 'ficheRenseignementPremiereCommunion']);
+        Route::match(['get', 'post'], '/fiche-renseignement-premiere-communion/pdf', [ImpressionController::class, 'ficheRenseignementPremiereCommunion']);
         Route::match(['get', 'post'], '/fiche-renseignement-confirmation', [ImpressionController::class, 'ficheRenseignementConfirmation']);
+        Route::match(['get', 'post'], '/fiche-renseignement-confirmation/pdf', [ImpressionController::class, 'ficheRenseignementConfirmation']);
     });
 
     Route::prefix('exports')->group(function () {
@@ -496,6 +513,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/modeles-documents/{modele}/toggle-status', [ModeleDocumentController::class, 'toggleStatus']);
     Route::post('/modeles-documents/{modele}/generer', [DocumentGenereController::class, 'store']);
     Route::post('/documents-generes/masse', [DocumentGenereController::class, 'genererMasse']);
+    Route::get('/documents-generes/{document}/print-data', [DocumentGenereController::class, 'printData']);
+    Route::get('/documents-generes/{document}/pdf', [DocumentGenereController::class, 'printData']);
     Route::apiResource('modeles-documents', ModeleDocumentController::class);
     Route::apiResource('documents-generes', DocumentGenereController::class)->except(['update']);
 });

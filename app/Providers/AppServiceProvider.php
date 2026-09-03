@@ -23,6 +23,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Déconnexion et révocation automatique après 10 minutes d'inactivité
+        \Laravel\Sanctum\Sanctum::authenticateAccessTokensUsing(function ($accessToken, $isValid) {
+            if (! $isValid) {
+                return false;
+            }
+
+            $inactivityMinutes = (int) config('sanctum.inactivity_timeout', 10);
+            if ($inactivityMinutes > 0) {
+                $lastActivity = $accessToken->last_used_at ?? $accessToken->created_at;
+                if ($lastActivity && $lastActivity->lt(now()->subMinutes($inactivityMinutes))) {
+                    // Jeton inactif depuis plus de 10 minutes -> suppression du jeton et rejet
+                    $accessToken->delete();
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
         // Rate Limiter Anti-Brute-Force sur la connexion (/api/v1/auth/login) : Max 5 tentatives par minute
         RateLimiter::for('login', function (Request $request) {
             $key = 'login.' . $request->ip() . '.' . Str::slug($request->input('login', $request->input('email', '')));
@@ -56,5 +75,9 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Preinscription::observe(\App\Observers\PreinscriptionObserver::class);
         \App\Models\Catechumene::observe(\App\Observers\CatechumeneObserver::class);
         \App\Models\Classe::observe(\App\Observers\ClasseObserver::class);
+
+        // Observer pour la création automatique du profil ADMIN lors d'une nouvelle paroisse
+        \App\Models\CatecheseConfiguration::observe(\App\Observers\CatecheseConfigurationObserver::class);
+
     }
 }

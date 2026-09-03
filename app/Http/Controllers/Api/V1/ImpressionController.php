@@ -18,6 +18,7 @@ use App\Models\OperationPaiement;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\Section;
+use App\Services\ParoisseHeaderService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -387,15 +388,15 @@ class ImpressionController extends Controller
         $animateurs = $classe ? $classe->affectations->map(fn($a) => trim($a->animateur->nom . ' ' . ($a->animateur->prenoms ?? $a->animateur->prenom ?? '')))->values()->toArray() : [];
 
         // Charger les décisions de fin d'année et bulletins si existants
-        $decisions = DecisionFinAnnee::where('paroisse_configuration_id', $paroisse->id)
-            ->when($annee, fn($q) => $q->where('annee_catechese_id', $annee->id))
+        $insIds = $inscriptions->pluck('id');
+        $decisions = DecisionFinAnnee::whereIn('inscription_annuelle_id', $insIds)
             ->get()
-            ->keyBy('catechumene_id');
+            ->keyBy('inscription_annuelle_id');
 
         $rows = $inscriptions->map(function ($ins, $index) use ($decisions) {
             $cat = $ins->catechumene;
             $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
-            $decision = $decisions->get($cat->id);
+            $decision = $decisions->get($ins->id);
 
             return [
                 'numero'           => sprintf('%02d', $index + 1),
@@ -691,28 +692,7 @@ class ImpressionController extends Controller
      */
     private function getEntetePayload(CatecheseConfiguration $paroisse, ?AnneeCatechese $annee): array
     {
-        $nomParoisse = $paroisse->nom_paroisse ?? ($paroisse->nom ?? 'Paroisse Catholique');
-
-        return [
-            'diocese'          => mb_strtoupper($paroisse->diocese ?? 'ARCHIDIOCÈSE D\'ABIDJAN'),
-            'doyenne'          => mb_strtoupper($paroisse->doyenne ?? 'DOYENNÉ'),
-            'paroisse'         => mb_strtoupper($nomParoisse),
-            'nom_paroisse'     => mb_strtoupper($nomParoisse),
-            'nom'              => mb_strtoupper($nomParoisse),
-            'ville'            => $paroisse->ville ?? 'Abidjan',
-            'commune'          => $paroisse->commune ?? 'Plateau',
-            'adresse'          => $paroisse->adresse ?? 'Avenue Jean-Paul II, Plateau, Abidjan',
-            'telephone'        => $paroisse->telephone ?? '+225 2720212223',
-            'email'            => $paroisse->email ?? 'contact@saintpaul-plateau.ci',
-            'site_web'         => $paroisse->site_web ?? '',
-            'cure_nom'         => $paroisse->cure_nom ?? 'Père Curé',
-            'coordination'     => $paroisse->coordination_nom ?? 'Coordination Pastorale de la Catéchèse',
-            'coordination_nom' => $paroisse->coordination_nom ?? 'Coordination Pastorale de la Catéchèse',
-            'logo_url'         => $paroisse->logo_url ?? ($paroisse->logo_path ? asset('storage/' . $paroisse->logo_path) : null),
-            'annee'            => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
-            'annee_libelle'    => $annee?->libelle ?? date('Y') . '-' . (date('Y') + 1),
-            'date_edition'     => now()->format('d/m/Y'),
-        ];
+        return app(ParoisseHeaderService::class)->getHeaderData($paroisse, $annee);
     }
 
     /**

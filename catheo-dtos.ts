@@ -880,6 +880,7 @@ export interface ValiderPreinscriptionDto {
   niveau_id: string;
   classe_id?: string;
   catechumene_id?: string;
+  tarif_id?: string;
   frais_payes?: boolean;
   notes_validation?: string;
 }
@@ -1010,7 +1011,7 @@ export interface InscriptionAnnuelleDto {
   id: string;
   code_inscription?: string;
   date_inscription: string;
-  statut_inscription: 'inscrit' | 'valide' | 'en_attente' | 'abandon';
+  statut_inscription: 'valide' | 'en_attente';
   frais_inscription_payes: boolean;
   observation?: string;
   catechumene?: CatechumeneDto;

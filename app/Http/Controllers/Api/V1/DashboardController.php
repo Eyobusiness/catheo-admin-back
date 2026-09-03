@@ -11,6 +11,7 @@ use App\Models\Annonce;
 use App\Models\AuditLog;
 use App\Models\BulletinTrimestriel;
 use App\Models\CaisseParoissiale;
+use App\Models\CatecheseConfiguration;
 use App\Models\Catechumene;
 use App\Models\Classe;
 use App\Models\Evaluation;
@@ -25,6 +26,7 @@ use App\Models\Section;
 use App\Models\Tarif;
 use App\Models\User;
 use App\Services\DashboardService;
+use App\Services\ParoisseHeaderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -509,10 +511,22 @@ class DashboardController extends Controller
         }
 
         $bilanData = app(\App\Services\BilanAnnuelService::class)->genererBilanAnnuel($paroisseId, $annee);
+        $paroisse = CatecheseConfiguration::find($paroisseId) ?? CatecheseConfiguration::firstOrFail();
+        $entete = app(ParoisseHeaderService::class)->getHeaderData($paroisse, $annee);
 
         return response()->json([
-            'status' => 'success',
-            'data'   => new \App\Http\Resources\Api\V1\BilanAnnuelResource($bilanData),
+            'status'   => 'success',
+            'entete'   => $entete,
+            'paroisse' => new \App\Http\Resources\Api\V1\CatecheseConfigurationResource($paroisse),
+            'data'     => new \App\Http\Resources\Api\V1\BilanAnnuelResource($bilanData),
         ]);
+    }
+
+    /**
+     * Alias de compatibilité retournant le rapport annuel en JSON pour l'impression Angular.
+     */
+    public function rapportAnnuelPdf(Request $request): JsonResponse
+    {
+        return $this->rapportAnnuel($request);
     }
 }

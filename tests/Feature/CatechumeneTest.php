@@ -145,6 +145,61 @@ class CatechumeneTest extends TestCase
         ]);
     }
 
+    public function test_preinscription_validation_uses_configured_tarif_and_no_fake_default(): void
+    {
+        $annee = AnneeCatechese::where('libelle', '2024-2025')->first();
+        // Utiliser le deuxième niveau pour éviter le tarif déjà semé sur le niveau 1
+        $niveau = Niveau::skip(1)->first() ?? Niveau::factory()->create();
+
+        // Création d'un tarif personnalisé spécifique
+        $tarif = \App\Models\Tarif::create([
+            'paroisse_configuration_id' => $this->paroisse->id,
+            'annee_catechese_id'        => $annee->id,
+            'niveau_id'                 => $niveau->id,
+            'intitule'                  => 'Frais Catéchèse 2ème Année',
+            'montant'                   => 8500.00,
+            'type_tarif'                => 'inscription',
+            'statut'                    => 'actif',
+        ]);
+
+        $campagne = CampagnePreinscription::create([
+            'paroisse_configuration_id' => $this->paroisse->id,
+            'annee_catechese_id'        => $annee->id,
+            'titre'                     => 'Campagne Test Tarif',
+            'date_debut'                => '2024-09-01',
+            'date_fin'                  => '2024-10-15',
+            'statut'                    => 'ouverte',
+        ]);
+
+        $preinscription = Preinscription::create([
+            'paroisse_configuration_id'  => $this->paroisse->id,
+            'campagne_preinscription_id' => $campagne->id,
+            'annee_catechese_id'         => $annee->id,
+            'code_dossier'               => 'PRE-TARIF-01',
+            'nom'                        => 'YAO',
+            'prenoms'                    => 'Kouassi',
+            'sexe'                       => 'M',
+            'date_naissance'             => '2015-01-10',
+            'statut'                     => 'en_attente',
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->token)
+            ->postJson('/api/v1/preinscriptions/' . $preinscription->uuid . '/valider', [
+                'niveau_id'        => $niveau->uuid,
+                'notes_validation' => 'Validé avec tarif configuré.',
+            ]);
+
+        $response->assertStatus(200);
+
+        // L'opération créée doit avoir le bon tarif_id et le montant configuré (8500), PAS 15000 ni null tarif_id
+        $this->assertDatabaseHas('operations_paiements', [
+            'paroisse_configuration_id' => $this->paroisse->id,
+            'tarif_id'                  => $tarif->id,
+            'montant'                   => 8500.00,
+            'statut'                    => 'en_attente',
+        ]);
+    }
+
     /**
      * Test complet du CRUD pour les campagnes de préinscription.
      */

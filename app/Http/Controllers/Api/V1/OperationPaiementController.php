@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\OperationPaiementResource;
 use App\Http\Resources\Api\V1\PaiementResource;
 use App\Models\AnneeCatechese;
 use App\Models\CaisseParoissiale;
@@ -95,7 +96,7 @@ class OperationPaiementController extends Controller
             $items = $query->orderBy('created_at', 'desc')->get();
             return response()->json([
                 'status' => 'success',
-                'data'   => $items,
+                'data'   => OperationPaiementResource::collection($items),
             ]);
         }
 
@@ -104,7 +105,7 @@ class OperationPaiementController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $operations->items(),
+            'data'   => OperationPaiementResource::collection($operations->items()),
             'meta'   => [
                 'current_page' => $operations->currentPage(),
                 'last_page'    => $operations->lastPage(),
@@ -164,7 +165,7 @@ class OperationPaiementController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Opération de paiement créée avec succès.',
-            'data'    => $op->load(['catechumene', 'tarif', 'anneeCatechese']),
+            'data'    => new OperationPaiementResource($op->load(['catechumene', 'tarif', 'anneeCatechese'])),
         ], 201);
     }
 
@@ -218,28 +219,48 @@ class OperationPaiementController extends Controller
             }
 
             // Vérifier si une opération existe déjà pour ce catéchumène et ce tarif pour l'année
-            $existing = OperationPaiement::where('annee_catechese_id', $anneeId)
+            $existingOp = OperationPaiement::where('annee_catechese_id', $anneeId)
                 ->where('catechumene_id', $ins->catechumene_id)
-                ->where('tarif_id', $tarifObj->id)
-                ->exists();
+                ->where(function ($q) use ($tarifObj) {
+                    $q->where('tarif_id', $tarifObj->id)
+                      ->orWhereNull('tarif_id');
+                })
+                ->where('statut', 'en_attente')
+                ->first();
 
-            if (!$existing) {
-                $refCount = OperationPaiement::where('paroisse_configuration_id', $ins->paroisse_configuration_id)->count() + 1;
-                $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', $refCount);
-
-                OperationPaiement::create([
-                    'paroisse_configuration_id' => $ins->paroisse_configuration_id,
-                    'annee_catechese_id'        => $anneeId,
-                    'catechumene_id'            => $ins->catechumene_id,
-                    'tarif_id'                  => $tarifObj->id,
-                    'reference'                 => $reference,
-                    'libelle'                   => "{$tarifObj->intitule} - {$ins->catechumene->nom_complet}",
-                    'montant'                   => (float) $tarifObj->montant,
-                    'montant_paye'              => 0,
-                    'echeance'                  => $tarifObj->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
-                    'statut'                    => 'en_attente',
+            if ($existingOp) {
+                // Mettre à jour avec le tarif officiel exact
+                $existingOp->update([
+                    'tarif_id' => $tarifObj->id,
+                    'libelle'  => "{$tarifObj->intitule} - {$ins->catechumene->nom_complet}",
+                    'montant'  => (float) $tarifObj->montant,
+                    'echeance' => $tarifObj->periode_fin?->toDateString() ?? $existingOp->echeance,
                 ]);
                 $generatedCount++;
+            } else {
+                $alreadyPaid = OperationPaiement::where('annee_catechese_id', $anneeId)
+                    ->where('catechumene_id', $ins->catechumene_id)
+                    ->where('tarif_id', $tarifObj->id)
+                    ->exists();
+
+                if (!$alreadyPaid) {
+                    $refCount = OperationPaiement::where('paroisse_configuration_id', $ins->paroisse_configuration_id)->count() + 1;
+                    $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', $refCount);
+
+                    OperationPaiement::create([
+                        'paroisse_configuration_id' => $ins->paroisse_configuration_id,
+                        'annee_catechese_id'        => $anneeId,
+                        'catechumene_id'            => $ins->catechumene_id,
+                        'tarif_id'                  => $tarifObj->id,
+                        'reference'                 => $reference,
+                        'libelle'                   => "{$tarifObj->intitule} - {$ins->catechumene->nom_complet}",
+                        'montant'                   => (float) $tarifObj->montant,
+                        'montant_paye'              => 0,
+                        'echeance'                  => $tarifObj->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
+                        'statut'                    => 'en_attente',
+                    ]);
+                    $generatedCount++;
+                }
             }
         }
 
@@ -266,41 +287,42 @@ class OperationPaiementController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Inscription introuvable.'], 404);
         }
 
-        // Trouver le tarif d'inscription
-        $tarif = Tarif::where('paroisse_configuration_id', $ins->paroisse_configuration_id)
-            ->where('type_tarif', 'inscription')
-            ->where(function ($q) use ($ins) {
-                $q->where('niveau_id', $ins->niveau_id)
-                  ->orWhereNull('niveau_id');
-            })
-            ->first();
+        $insParoisseId = $ins->paroisse_configuration_id ?? $paroisseId;
 
-        $montant = $tarif ? (float) $tarif->montant : 15000;
-        $refCount = OperationPaiement::where('paroisse_configuration_id', $ins->paroisse_configuration_id)->count() + 1;
+        // Trouver le tarif d'inscription réel pour ce niveau
+        $tarif = $this->resolveTarifForInscription($insParoisseId, $ins->annee_catechese_id, $ins->niveau, $request->input('tarif_id'));
+
+        if (!$tarif) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => "Aucun tarif d'inscription n'est configuré pour ce niveau (" . ($ins->niveau?->nom ?? 'Inconnu') . "). Veuillez d'abord créer ou configurer un tarif.",
+            ], 422);
+        }
+
+        $refCount = OperationPaiement::where('paroisse_configuration_id', $insParoisseId)->count() + 1;
         $reference = 'OP-' . date('Y') . '-' . sprintf('%04d', $refCount);
 
-        $op = OperationPaiement::firstOrCreate(
+        $op = OperationPaiement::updateOrCreate(
             [
-                'paroisse_configuration_id' => $ins->paroisse_configuration_id,
+                'paroisse_configuration_id' => $insParoisseId,
                 'catechumene_id'            => $ins->catechumene_id,
                 'annee_catechese_id'        => $ins->annee_catechese_id,
+                'tarif_id'                  => $tarif->id,
                 'statut'                    => 'en_attente',
             ],
             [
-                'tarif_id'     => $tarif?->id,
                 'reference'    => $reference,
-                'libelle'      => "Frais d'inscription - {$ins->catechumene?->nom_complet} (" . ($ins->niveau?->nom ?? 'Catéchèse') . ")",
-                'montant'      => $montant,
+                'libelle'      => "{$tarif->intitule} - " . ($ins->catechumene?->nom_complet ?? 'Catéchumène') . " (" . ($ins->niveau?->nom ?? 'Catéchèse') . ")",
+                'montant'      => (float) $tarif->montant,
                 'montant_paye' => 0,
-                'echeance'     => now()->addMonths(1)->toDateString(),
-                'statut'       => 'en_attente',
+                'echeance'     => $tarif->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
             ]
         );
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Opération de paiement pour l\'inscription générée.',
-            'data'    => $op->load(['catechumene', 'tarif']),
+            'message' => 'Opération de paiement pour l\'inscription générée avec succès.',
+            'data'    => new OperationPaiementResource($op->load(['catechumene', 'tarif', 'anneeCatechese'])),
         ]);
     }
 
@@ -404,7 +426,7 @@ class OperationPaiementController extends Controller
             'status'    => 'success',
             'message'   => "Paiement validé avec succès. Reçu N° {$paiement->numero_recu}",
             'data'      => new PaiementResource($paiement),
-            'operation' => $op->fresh(['catechumene', 'tarif']),
+            'operation' => new OperationPaiementResource($op->fresh(['catechumene', 'tarif'])),
         ]);
     }
 
@@ -418,7 +440,7 @@ class OperationPaiementController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $op->load(['catechumene', 'tarif', 'anneeCatechese']),
+            'data'   => new OperationPaiementResource($op->load(['catechumene', 'tarif', 'anneeCatechese'])),
         ]);
     }
 
@@ -442,7 +464,7 @@ class OperationPaiementController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Opération mise à jour avec succès.',
-            'data'    => $op->fresh(['catechumene', 'tarif', 'anneeCatechese']),
+            'data'    => new OperationPaiementResource($op->fresh(['catechumene', 'tarif', 'anneeCatechese'])),
         ]);
     }
 
@@ -467,5 +489,13 @@ class OperationPaiementController extends Controller
         if ($userParoisseId && $targetParoisseId && $userParoisseId !== $targetParoisseId) {
             abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
         }
+    }
+
+    /**
+     * Résout le tarif d'inscription approprié pour un niveau et une année pastorale.
+     */
+    private function resolveTarifForInscription(int $paroisseId, ?int $anneeId, ?Niveau $niveau, ?string $explicitTarifId = null): ?Tarif
+    {
+        return Tarif::resolveForInscription($paroisseId, $anneeId, $niveau, $explicitTarifId);
     }
 }
