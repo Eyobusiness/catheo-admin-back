@@ -50,6 +50,16 @@ class InscriptionAnnuelleResource extends JsonResource
             'telephone'               => $cat?->telephone,
             'telephone_parent'        => $cat?->telephone_tuteur ?? $cat?->telephone_pere ?? $cat?->telephone_mere ?? $cat?->telephone,
 
+            // Informations sacramentelles
+            'est_baptise'             => (bool) $cat?->est_baptise,
+            'date_bapteme'            => $cat?->date_bapteme?->toDateString(),
+            'paroisse_bapteme'        => $cat?->paroisse_bapteme,
+            'num_carnet_bapteme'      => $cat?->num_carnet_bapteme,
+            'date_premiere_communion' => $cat?->date_premiere_communion?->toDateString(),
+            'paroisse_premiere_communion' => $cat?->paroisse_premiere_communion,
+            'date_confirmation'       => $cat?->date_confirmation?->toDateString(),
+            'paroisse_confirmation'   => $cat?->paroisse_confirmation,
+
             // Relations
             'catechumene'             => $this->whenLoaded('catechumene', function () use ($cat) {
                 return [
@@ -61,6 +71,14 @@ class InscriptionAnnuelleResource extends JsonResource
                     'nom_complet' => $cat ? trim("{$cat->nom} {$cat->prenoms}") : null,
                     'sexe'        => $cat?->sexe,
                     'telephone'   => $cat?->telephone,
+                    'est_baptise' => (bool) $cat?->est_baptise,
+                    'date_bapteme'=> $cat?->date_bapteme?->toDateString(),
+                    'paroisse_bapteme' => $cat?->paroisse_bapteme,
+                    'num_carnet_bapteme' => $cat?->num_carnet_bapteme,
+                    'date_premiere_communion' => $cat?->date_premiere_communion?->toDateString(),
+                    'paroisse_premiere_communion' => $cat?->paroisse_premiere_communion,
+                    'date_confirmation' => $cat?->date_confirmation?->toDateString(),
+                    'paroisse_confirmation' => $cat?->paroisse_confirmation,
                 ];
             }),
             'annee_catechese'         => new AnneeCatecheseResource($this->whenLoaded('anneeCatechese')),

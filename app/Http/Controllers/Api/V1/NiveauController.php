@@ -16,7 +16,7 @@ class NiveauController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Niveau::with('section')->where('paroisse_configuration_id', $paroisseId);
 
@@ -58,7 +58,7 @@ class NiveauController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'section_id' => ['required', 'string', 'exists:sections,uuid'],
@@ -88,7 +88,7 @@ class NiveauController extends Controller
      */
     public function show(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $niveau->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
 
         $niveau->load('section');
 
@@ -103,7 +103,7 @@ class NiveauController extends Controller
      */
     public function update(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $niveau->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
 
         $validated = $request->validate([
             'section_id' => ['sometimes', 'required', 'string', 'exists:sections,uuid'],
@@ -133,7 +133,7 @@ class NiveauController extends Controller
      */
     public function toggleStatus(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $niveau->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
 
         $nouveauStatut = ($niveau->statut === 'actif') ? 'inactif' : 'actif';
         $niveau->update(['statut' => $nouveauStatut]);
@@ -151,7 +151,7 @@ class NiveauController extends Controller
      */
     public function destroy(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $niveau->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
 
         if ($niveau->classes()->count() > 0) {
             return response()->json([

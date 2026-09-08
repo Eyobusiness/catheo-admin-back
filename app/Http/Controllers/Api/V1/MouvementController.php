@@ -15,7 +15,7 @@ class MouvementController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Mouvement::withCount('inscriptionsAnnuelles')
             ->where('paroisse_configuration_id', $paroisseId);
@@ -50,7 +50,7 @@ class MouvementController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'nom'         => ['required', 'string', 'max:150'],
@@ -77,7 +77,7 @@ class MouvementController extends Controller
      */
     public function show(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
 
         $mouvement->loadCount('inscriptionsAnnuelles');
 
@@ -92,7 +92,7 @@ class MouvementController extends Controller
      */
     public function update(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom'         => ['sometimes', 'required', 'string', 'max:150'],
@@ -121,7 +121,7 @@ class MouvementController extends Controller
      */
     public function toggleStatus(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
 
         $nouveauStatut = (strtolower($mouvement->statut) === 'active') ? 'Inactive' : 'Active';
         $mouvement->update(['statut' => $nouveauStatut]);
@@ -139,7 +139,7 @@ class MouvementController extends Controller
      */
     public function destroy(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
 
         if ($mouvement->inscriptionsAnnuelles()->count() > 0) {
             return response()->json([

@@ -56,6 +56,18 @@ class CatechumeneSacrementListResource extends JsonResource
             'date_premiere_communion'     => $communion?->date_sacrement?->toDateString() ?? $this->date_premiere_communion?->toDateString(),
             'date_confirmation'           => $confirmation?->date_sacrement?->toDateString() ?? $this->date_confirmation?->toDateString(),
 
+            'exceptions'                  => $this->relationLoaded('exceptionsSacrements') ? $this->exceptionsSacrements->map(function ($exc) {
+                return [
+                    'id'            => (string) ($exc->uuid ?? $exc->id),
+                    'catechumeneId' => (string) ($this->uuid ?? $this->id),
+                    'sacrementType' => $exc->sacrement?->nom ?? 'Baptême',
+                    'motif'         => $exc->motif,
+                    'autorisePar'   => $exc->autorise_par ?? '',
+                    'observation'   => $exc->observation ?? '',
+                    'dateAjout'     => $exc->date_derogation?->toDateString() ?? $exc->created_at?->toDateString(),
+                ];
+            })->values() : [],
+
             'created_at'                  => $this->created_at?->toIso8601String(),
         ];
     }

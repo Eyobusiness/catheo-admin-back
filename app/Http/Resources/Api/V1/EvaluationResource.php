@@ -60,7 +60,10 @@ class EvaluationResource extends JsonResource
             'annee_catechese_id' => $this->anneeCatechese?->uuid,
             'classe_id'          => $this->classe?->uuid,
             'section'            => $this->classe?->niveau?->section?->nom,
+            'session'            => $this->classe?->niveau?->section?->nom,
+            'section_id'         => $this->classe?->niveau?->section?->uuid,
             'niveau'             => $this->classe?->niveau?->nom,
+            'niveau_id'          => $this->classe?->niveau?->uuid,
             'classe'             => $this->relationLoaded('classe') ? new ClasseResource($this->classe) : $this->classe?->nom,
             'stats'              => [
                 'moyenne_classe'     => $avg,

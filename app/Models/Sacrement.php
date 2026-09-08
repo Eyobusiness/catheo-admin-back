@@ -29,6 +29,11 @@ class Sacrement extends Model
     /**
      * Parcours sacramentels associés à ce type de sacrement.
      */
+    public function exceptions(): HasMany
+    {
+        return $this->hasMany(SacrementException::class, 'sacrement_id');
+    }
+
     public function catechumenSacrements(): HasMany
     {
         return $this->hasMany(CatechumenSacrement::class, 'sacrement_id');

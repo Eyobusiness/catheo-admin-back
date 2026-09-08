@@ -15,7 +15,7 @@ class CebController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Ceb::withCount('inscriptionsAnnuelles')
             ->where('paroisse_configuration_id', $paroisseId);
@@ -51,7 +51,7 @@ class CebController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'nom'         => ['required', 'string', 'max:150'],
@@ -79,7 +79,7 @@ class CebController extends Controller
      */
     public function show(Request $request, Ceb $ceb): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $ceb->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $ceb->paroisse_configuration_id);
 
         $ceb->loadCount('inscriptionsAnnuelles');
 
@@ -94,7 +94,7 @@ class CebController extends Controller
      */
     public function update(Request $request, Ceb $ceb): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $ceb->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $ceb->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom'         => ['sometimes', 'required', 'string', 'max:150'],
@@ -124,7 +124,7 @@ class CebController extends Controller
      */
     public function toggleStatus(Request $request, Ceb $ceb): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $ceb->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $ceb->paroisse_configuration_id);
 
         $nouveauStatut = (strtolower($ceb->statut) === 'active') ? 'Inactive' : 'Active';
         $ceb->update(['statut' => $nouveauStatut]);
@@ -142,7 +142,7 @@ class CebController extends Controller
      */
     public function destroy(Request $request, Ceb $ceb): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $ceb->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $ceb->paroisse_configuration_id);
 
         if ($ceb->inscriptionsAnnuelles()->count() > 0) {
             return response()->json([

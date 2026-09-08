@@ -8,6 +8,7 @@ use App\Models\CatechumenSacrement;
 use App\Models\Classe;
 use App\Models\Niveau;
 use App\Models\Sacrement;
+use App\Models\SacrementException;
 use App\Models\Section;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -50,6 +51,7 @@ class SacrementService
                       ->latest('id');
                 },
                 'parcoursSacrements.sacrement',
+                'exceptionsSacrements.sacrement',
                 'parcoursSacrements.validator',
             ]);
 
@@ -440,5 +442,469 @@ class SacrementService
             ->first();
 
         return $sacr?->id;
+    }
+
+    /**
+     * Candidats au Baptême : 3ème Année + NON BAPTISÉ
+     */
+    public function getCandidatsBapteme(int $paroisseId, array $filters = []): LengthAwarePaginator
+    {
+        $query = $this->buildCandidatsBaseQuery($paroisseId, $filters)
+            ->where(function ($rootQ) {
+                $rootQ->where(function ($q) {
+                    $q->where(function ($bq) {
+                        $bq->whereNull('est_baptise')
+                          ->orWhere('est_baptise', false)
+                          ->orWhere('est_baptise', 0);
+                    })
+                    ->where(function ($bq) {
+                        $bq->whereNull('date_bapteme')
+                          ->orWhere('date_bapteme', '');
+                    })
+                    ->where(function ($bq) {
+                        $bq->whereNull('paroisse_bapteme')
+                          ->orWhere('paroisse_bapteme', '');
+                    });
+                    $this->applyTroisiemeAnneeFilter($q);
+                })
+                ->orWhereHas('exceptionsSacrements', function ($eq) {
+                    $eq->where('statut', 'actif')
+                       ->whereHas('sacrement', fn($sq) => $sq->where('code', 'BAPTEME')->orWhere('id', 1));
+                });
+            });
+
+        $this->applyCommonFilters($query, $paroisseId, $filters);
+
+        $perPage = (int) ($filters['per_page'] ?? 100);
+        return $query->latest('id')->paginate($perPage);
+    }
+
+    /**
+     * Candidats à la Première Communion : 3ème Année + BAPTISÉ (ou Dérogation pastorale)
+     */
+    public function getCandidatsPremiereCommunion(int $paroisseId, array $filters = []): LengthAwarePaginator
+    {
+        $query = $this->buildCandidatsBaseQuery($paroisseId, $filters)
+            ->where(function ($rootQ) {
+                $rootQ->where(function ($q) {
+                    $q->where(function ($bq) {
+                        $bq->where('est_baptise', true)
+                          ->orWhere('est_baptise', 1)
+                          ->orWhereNotNull('date_bapteme')
+                          ->orWhere(function ($sq) {
+                              $sq->whereNotNull('paroisse_bapteme')->where('paroisse_bapteme', '!=', '');
+                          });
+                    });
+                    $this->applyTroisiemeAnneeFilter($q);
+                })
+                ->orWhereHas('exceptionsSacrements', function ($eq) {
+                    $eq->where('statut', 'actif')
+                       ->whereHas('sacrement', fn($sq) => $sq->where('code', 'PREMIERE_COMMUNION')->orWhere('id', 2));
+                });
+            });
+
+        $this->applyCommonFilters($query, $paroisseId, $filters);
+
+        $perPage = (int) ($filters['per_page'] ?? 100);
+        return $query->latest('id')->paginate($perPage);
+    }
+
+    /**
+     * Candidats à la Confirmation :
+     * - Section Adulte : 4ème ou 5ème Année + BAPTISÉ (ou Dérogation)
+     * - Autre section : 5ème Année + BAPTISÉ (ou Dérogation)
+     */
+    public function getCandidatsConfirmation(int $paroisseId, array $filters = []): LengthAwarePaginator
+    {
+        $query = $this->buildCandidatsBaseQuery($paroisseId, $filters)
+            ->where(function ($rootQ) {
+                $rootQ->where(function ($q) {
+                    $q->where(function ($bq) {
+                        $bq->where('est_baptise', true)
+                          ->orWhere('est_baptise', 1)
+                          ->orWhereNotNull('date_bapteme')
+                          ->orWhere(function ($sq) {
+                              $sq->whereNotNull('paroisse_bapteme')->where('paroisse_bapteme', '!=', '');
+                          });
+                    });
+                    $this->applyConfirmationNiveauFilter($q);
+                })
+                ->orWhereHas('exceptionsSacrements', function ($eq) {
+                    $eq->where('statut', 'actif')
+                       ->whereHas('sacrement', fn($sq) => $sq->where('code', 'CONFIRMATION')->orWhere('id', 3));
+                });
+            });
+
+        $this->applyCommonFilters($query, $paroisseId, $filters);
+
+        $perPage = (int) ($filters['per_page'] ?? 100);
+        return $query->latest('id')->paginate($perPage);
+    }
+
+    protected function buildCandidatsBaseQuery(int $paroisseId, array $filters = []): Builder
+    {
+        return Catechumene::where('paroisse_configuration_id', $paroisseId)
+            ->whereHas('inscriptionsAnnuelles', function (Builder $q) {
+                $q->where('statut_inscription', '!=', 'annulee');
+            })
+            ->with([
+                'inscriptionsAnnuelles' => function ($q) {
+                    $q->where('statut_inscription', '!=', 'annulee')
+                      ->with(['section', 'niveau', 'classe', 'anneeCatechese'])
+                      ->latest('id');
+                },
+                'parcoursSacrements.sacrement',
+                'exceptionsSacrements.sacrement',
+            ]);
+    }
+
+    protected function applyTroisiemeAnneeFilter(Builder $query): void
+    {
+        $query->whereHas('inscriptionsAnnuelles', function (Builder $iq) {
+            $iq->where('statut_inscription', '!=', 'annulee')
+               ->where(function ($sq) {
+                   $sq->whereHas('niveau', function ($nq) {
+                       $nq->where('ordre_affichage', 3)
+                          ->orWhere('nom', 'like', '%3ème%')
+                          ->orWhere('nom', 'like', '%3eme%')
+                          ->orWhere('nom', 'like', '%3e %')
+                          ->orWhere('nom', 'like', '3e %')
+                          ->orWhere('nom', 'like', '%trois%');
+                   })->orWhere(function ($cq) {
+                       $cq->whereDoesntHave('niveau', function ($nq) {
+                           $nq->whereIn('ordre_affichage', [1, 2, 4, 5]);
+                       })->whereHas('classe', function ($clq) {
+                           $clq->where('nom', 'like', '%3ème%')
+                               ->orWhere('nom', 'like', '%3eme%')
+                               ->orWhere('nom', 'like', '%3e %')
+                               ->orWhere('nom', 'like', '3e %')
+                               ->orWhere('nom', 'like', '%trois%');
+                       });
+                   });
+               });
+        });
+    }
+
+    protected function applyConfirmationNiveauFilter(Builder $query): void
+    {
+        $query->whereHas('inscriptionsAnnuelles', function (Builder $iq) {
+            $iq->where('statut_inscription', '!=', 'annulee')
+               ->where(function ($sq) {
+                   // Section Adulte: 4e ou 5e année
+                   $sq->where(function ($aq) {
+                       $aq->where(function ($secQ) {
+                           $secQ->whereHas('section', function ($sq2) {
+                               $sq2->where('code', 'SEC-ADULTE')
+                                   ->orWhere('code', 'like', '%ADULTE%')
+                                   ->orWhere('nom', 'like', '%adulte%');
+                           })->orWhereHas('classe', function ($cq2) {
+                               $cq2->where('nom', 'like', '%adulte%');
+                           });
+                       })->where(function ($nivQ) {
+                           $nivQ->whereHas('niveau', function ($nq) {
+                               $nq->whereIn('ordre_affichage', [4, 5])
+                                  ->orWhere('nom', 'like', '%4%')
+                                  ->orWhere('nom', 'like', '%5%');
+                           })->orWhere(function ($clQ) {
+                               $clQ->whereDoesntHave('niveau', function ($nq) {
+                                   $nq->whereIn('ordre_affichage', [1, 2, 3]);
+                               })->whereHas('classe', function ($cq) {
+                                   $cq->where('nom', 'like', '%4%')
+                                      ->orWhere('nom', 'like', '%5%');
+                               });
+                           });
+                       });
+                   })
+                   // Autre section: 5e année
+                   ->orWhere(function ($oq) {
+                       $oq->whereHas('niveau', function ($nq) {
+                           $nq->where('ordre_affichage', 5)
+                              ->orWhere('nom', 'like', '%5%')
+                              ->orWhere('nom', 'like', '%cinq%')
+                              ->orWhere('nom', 'like', '%confirmat%');
+                       })->orWhere(function ($clQ) {
+                           $clQ->whereDoesntHave('niveau', function ($nq) {
+                               $nq->whereIn('ordre_affichage', [1, 2, 3, 4]);
+                           })->whereHas('classe', function ($cq) {
+                               $cq->where('nom', 'like', '%5%')
+                                  ->orWhere('nom', 'like', '%cinq%')
+                                  ->orWhere('nom', 'like', '%confirmat%');
+                           });
+                       });
+                   });
+               });
+        });
+    }
+
+    protected function applyCommonFilters(Builder $query, int $paroisseId, array $filters = []): void
+    {
+        if (!empty($filters['annee_catechese_id'])) {
+            $anneeId = $this->resolveId(AnneeCatechese::class, $filters['annee_catechese_id'], $paroisseId);
+            if ($anneeId) {
+                $query->whereHas('inscriptionsAnnuelles', fn($q) => $q->where('annee_catechese_id', $anneeId));
+            }
+        }
+
+        if (!empty($filters['section_id'])) {
+            $sectionId = $this->resolveId(Section::class, $filters['section_id'], $paroisseId);
+            if ($sectionId) {
+                $query->whereHas('inscriptionsAnnuelles', fn($q) => $q->where('section_id', $sectionId));
+            }
+        }
+
+        if (!empty($filters['niveau_id'])) {
+            $niveauId = $this->resolveId(Niveau::class, $filters['niveau_id'], $paroisseId);
+            if ($niveauId) {
+                $query->whereHas('inscriptionsAnnuelles', fn($q) => $q->where('niveau_id', $niveauId));
+            }
+        }
+
+        if (!empty($filters['classe_id'])) {
+            $classeId = $this->resolveId(Classe::class, $filters['classe_id'], $paroisseId);
+            if ($classeId) {
+                $query->whereHas('inscriptionsAnnuelles', fn($q) => $q->where('classe_id', $classeId));
+            }
+        }
+
+        if (!empty($filters['search'])) {
+            $search = trim($filters['search']);
+            $query->where(function ($q) use ($search) {
+                $q->where('nom', 'like', "%{$search}%")
+                  ->orWhere('prenoms', 'like', "%{$search}%")
+                  ->orWhere('matricule', 'like', "%{$search}%")
+                  ->orWhere('telephone', 'like', "%{$search}%");
+            });
+        }
+    }
+
+    /**
+     * Obtenir la liste des exceptions pastorales / dérogations de la paroisse.
+     */
+    public function getExceptions(int $paroisseId, array $filters = []): Collection
+    {
+        $query = SacrementException::where('paroisse_configuration_id', $paroisseId)
+            ->with([
+                'catechumene.inscriptionsAnnuelles' => function ($q) {
+                    $q->where('statut_inscription', '!=', 'annulee')
+                      ->with(['section', 'niveau', 'classe', 'anneeCatechese'])
+                      ->latest('id');
+                },
+                'sacrement',
+                'anneeCatechese',
+                'creator'
+            ]);
+
+        if (!empty($filters['sacrement_id'])) {
+            $sacrId = $this->resolveSacrementId($filters['sacrement_id']);
+            if ($sacrId) {
+                $query->where('sacrement_id', $sacrId);
+            }
+        }
+
+        if (!empty($filters['statut'])) {
+            $query->where('statut', $filters['statut']);
+        }
+
+        if (!empty($filters['annee_catechese_id'])) {
+            $anneeId = $this->resolveId(AnneeCatechese::class, $filters['annee_catechese_id'], $paroisseId);
+            if ($anneeId) {
+                $query->where('annee_catechese_id', $anneeId);
+            }
+        }
+
+        if (!empty($filters['search'])) {
+            $search = trim($filters['search']);
+            $query->where(function ($q) use ($search) {
+                $q->where('motif', 'like', "%{$search}%")
+                  ->orWhere('autorise_par', 'like', "%{$search}%")
+                  ->orWhere('observation', 'like', "%{$search}%")
+                  ->orWhereHas('catechumene', function ($cq) use ($search) {
+                      $cq->where('nom', 'like', "%{$search}%")
+                         ->orWhere('prenoms', 'like', "%{$search}%")
+                         ->orWhere('matricule', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        return $query->latest('id')->get();
+    }
+
+    /**
+     * Enregistrer une exception pastorale (dérogation) pour un catéchumène.
+     */
+    public function storeException(int $paroisseId, array $data, ?User $user): SacrementException
+    {
+        $catIdentifier = $data['catechumene_id'] ?? $data['catechumeneId'] ?? null;
+        if (!$catIdentifier) {
+            throw ValidationException::withMessages(['catechumene_id' => 'Le catéchumène est obligatoire.']);
+        }
+
+        $catechumene = is_numeric($catIdentifier)
+            ? Catechumene::where('paroisse_configuration_id', $paroisseId)->where('id', $catIdentifier)->first()
+            : Catechumene::where('paroisse_configuration_id', $paroisseId)->where('uuid', $catIdentifier)->first();
+
+        if (!$catechumene) {
+            throw ValidationException::withMessages(['catechumene_id' => 'Catéchumène introuvable pour cette paroisse.']);
+        }
+
+        $sacrementId = null;
+        if (!empty($data['sacrement_id'])) {
+            $sacrementId = $this->resolveSacrementId($data['sacrement_id']);
+        } elseif (!empty($data['sacrement_type']) || !empty($data['sacrementType'])) {
+            $st = $data['sacrement_type'] ?? $data['sacrementType'];
+            $sacrementId = $this->resolveSacrementId($st);
+            if (!$sacrementId) {
+                $cleanSt = strtolower(trim($st));
+                if (str_contains($cleanSt, 'bapt')) {
+                    $sacrementId = 1;
+                } elseif (str_contains($cleanSt, 'commun')) {
+                    $sacrementId = 2;
+                } elseif (str_contains($cleanSt, 'confirm')) {
+                    $sacrementId = 3;
+                }
+            }
+        }
+
+        if (!$sacrementId) {
+            $sacrementId = 1;
+        }
+
+        $anneeId = null;
+        if (!empty($data['annee_catechese_id']) || !empty($data['anneeCatecheseId'])) {
+            $rawAnnee = $data['annee_catechese_id'] ?? $data['anneeCatecheseId'];
+            $anneeId = $this->resolveId(AnneeCatechese::class, $rawAnnee, $paroisseId);
+        }
+        if (!$anneeId) {
+            // 1. Année active par statut (active, ouverte, en_cours)
+            $activeAnnee = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
+                ->whereIn('statut', ['active', 'ouverte', 'en_cours'])
+                ->latest('id')
+                ->first();
+
+            // 2. Année issue de la dernière inscription du catéchumène
+            if (!$activeAnnee) {
+                $lastInsc = $catechumene->inscriptionsAnnuelles()
+                    ->where('statut_inscription', '!=', 'annulee')
+                    ->latest('id')
+                    ->first();
+                $anneeId = $lastInsc?->annee_catechese_id;
+            } else {
+                $anneeId = $activeAnnee->id;
+            }
+
+            // 3. Repli : toute dernière année pastorale enregistrée
+            if (!$anneeId) {
+                $anneeId = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
+                    ->latest('id')
+                    ->first()?->id;
+            }
+        }
+
+        $dateDerogation = $data['date_derogation'] ?? $data['dateAjout'] ?? now()->toDateString();
+        $motif = $data['motif'] ?? 'Décision du Curé';
+        $autorisePar = $data['autorise_par'] ?? $data['autorisePar'] ?? 'Père Curé';
+        $observation = $data['observation'] ?? null;
+        $statut = $data['statut'] ?? 'actif';
+
+        $exception = SacrementException::create([
+            'paroisse_configuration_id' => $paroisseId,
+            'catechumene_id'            => $catechumene->id,
+            'sacrement_id'               => $sacrementId,
+            'annee_catechese_id'         => $anneeId,
+            'motif'                      => $motif,
+            'autorise_par'               => $autorisePar,
+            'observation'                => $observation,
+            'date_derogation'            => $dateDerogation,
+            'statut'                     => $statut,
+            'created_by'                 => $user?->id,
+        ]);
+
+        return $exception->load([
+            'catechumene.inscriptionsAnnuelles' => function ($q) {
+                $q->where('statut_inscription', '!=', 'annulee')
+                  ->with(['section', 'niveau', 'classe', 'anneeCatechese'])
+                  ->latest('id');
+            },
+            'sacrement',
+            'anneeCatechese',
+            'creator'
+        ]);
+    }
+
+    /**
+     * Mettre à jour une exception pastorale.
+     */
+    public function updateException(int $paroisseId, string|int $exceptionId, array $data, ?User $user): SacrementException
+    {
+        $exception = SacrementException::where('paroisse_configuration_id', $paroisseId)
+            ->where(function ($q) use ($exceptionId) {
+                $q->where('uuid', $exceptionId)
+                  ->orWhere('id', is_numeric($exceptionId) ? $exceptionId : 0);
+            })
+            ->firstOrFail();
+
+        if (isset($data['motif'])) {
+            $exception->motif = $data['motif'];
+        }
+        if (isset($data['autorise_par']) || isset($data['autorisePar'])) {
+            $exception->autorise_par = $data['autorise_par'] ?? $data['autorisePar'];
+        }
+        if (array_key_exists('observation', $data)) {
+            $exception->observation = $data['observation'];
+        }
+        if (isset($data['date_derogation']) || isset($data['dateAjout'])) {
+            $exception->date_derogation = $data['date_derogation'] ?? $data['dateAjout'];
+        }
+        if (isset($data['statut'])) {
+            $exception->statut = $data['statut'];
+        }
+        if (!empty($data['annee_catechese_id']) || !empty($data['anneeCatecheseId'])) {
+            $rawAnnee = $data['annee_catechese_id'] ?? $data['anneeCatecheseId'];
+            $anneeId = $this->resolveId(AnneeCatechese::class, $rawAnnee, $paroisseId);
+            if ($anneeId) {
+                $exception->annee_catechese_id = $anneeId;
+            }
+        }
+        if (!empty($data['sacrement_id']) || !empty($data['sacrement_type']) || !empty($data['sacrementType'])) {
+            $sacrId = !empty($data['sacrement_id'])
+                ? $this->resolveSacrementId($data['sacrement_id'])
+                : $this->resolveSacrementId($data['sacrement_type'] ?? $data['sacrementType']);
+            if ($sacrId) {
+                $exception->sacrement_id = $sacrId;
+            }
+        }
+        $exception->updated_by = $user?->id;
+        $exception->save();
+
+        return $exception->load([
+            'catechumene.inscriptionsAnnuelles' => function ($q) {
+                $q->where('statut_inscription', '!=', 'annulee')
+                  ->with(['section', 'niveau', 'classe', 'anneeCatechese'])
+                  ->latest('id');
+            },
+            'sacrement',
+            'anneeCatechese',
+            'creator'
+        ]);
+    }
+
+    /**
+     * Supprimer (soft-delete) une exception pastorale.
+     */
+    public function deleteException(int $paroisseId, string|int $exceptionId, ?User $user = null): bool
+    {
+        $exception = SacrementException::where('paroisse_configuration_id', $paroisseId)
+            ->where(function ($q) use ($exceptionId) {
+                $q->where('uuid', $exceptionId)
+                  ->orWhere('id', is_numeric($exceptionId) ? $exceptionId : 0);
+            })
+            ->firstOrFail();
+
+        if ($user) {
+            $exception->deleted_by = $user->id;
+            $exception->save();
+        }
+
+        return (bool) $exception->delete();
     }
 }

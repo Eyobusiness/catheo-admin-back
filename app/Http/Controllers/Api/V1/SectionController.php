@@ -15,7 +15,7 @@ class SectionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $query = Section::with('niveaux')
             ->where('paroisse_configuration_id', $paroisseId);
@@ -51,7 +51,7 @@ class SectionController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
 
         $validated = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
@@ -78,7 +78,7 @@ class SectionController extends Controller
      */
     public function show(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $section->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
 
         $section->load('niveaux');
 
@@ -93,7 +93,7 @@ class SectionController extends Controller
      */
     public function update(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $section->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom' => ['sometimes', 'required', 'string', 'max:255'],
@@ -117,7 +117,7 @@ class SectionController extends Controller
      */
     public function toggleStatus(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $section->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
 
         $nouveauStatut = ($section->statut === 'actif') ? 'inactif' : 'actif';
         $section->update(['statut' => $nouveauStatut]);
@@ -134,7 +134,7 @@ class SectionController extends Controller
      */
     public function destroy(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $section->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
 
         if ($section->niveaux()->count() > 0) {
             return response()->json([

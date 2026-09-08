@@ -102,6 +102,11 @@ class Catechumene extends Authenticatable
         return $this->hasMany(ParrainMarraine::class, 'catechumene_id');
     }
 
+    public function exceptionsSacrements(): HasMany
+    {
+        return $this->hasMany(SacrementException::class, 'catechumene_id');
+    }
+
     public function parcoursSacrements(): HasMany
     {
         return $this->hasMany(CatechumenSacrement::class, 'catechumene_id');

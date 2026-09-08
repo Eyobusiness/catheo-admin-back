@@ -148,6 +148,13 @@ class PreinscriptionController extends Controller
                 ?? CampagnePreinscription::latest()->firstOrFail();
         }
 
+        if ($campagne->statut !== 'ouverte') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => "La campagne de préinscription pour l'année pastorale en cours est actuellement clôturée. Veuillez vous rendre au secrétariat de la paroisse.",
+            ], 422);
+        }
+
         $paroisseId = $request->user()?->paroisse_configuration_id 
             ?? $campagne->paroisse_configuration_id 
             ?? CatecheseConfiguration::first()?->id;
@@ -334,7 +341,13 @@ class PreinscriptionController extends Controller
 
             // Si nouvelle inscription ou catéchumène non trouvé, on le crée
             if (!$catechumene) {
-                $matricule = app(\App\Services\MatriculeGeneratorService::class)->generate($item->paroisse_configuration_id);
+                $sectionForMatricule = $niveau->section ?? $niveau->section_id;
+                $yearForMatricule = $annee?->libelle ?? $annee?->date_debut;
+                $matricule = app(\App\Services\MatriculeGeneratorService::class)->generate(
+                    $item->paroisse_configuration_id,
+                    $sectionForMatricule,
+                    $yearForMatricule
+                );
 
                 $catechumene = Catechumene::create([
                     'paroisse_configuration_id' => $item->paroisse_configuration_id,

@@ -27,6 +27,13 @@ class ModuleTrimestriel extends Model
         'statut',
     ];
 
+    protected $appends = ['libelle'];
+
+    public function getLibelleAttribute(): ?string
+    {
+        return $this->nom;
+    }
+
     protected $casts = [
         'date_debut' => 'date',
         'date_fin' => 'date',

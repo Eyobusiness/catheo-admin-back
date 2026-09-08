@@ -4,6 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreCatechumenSacrementRequest;
+use App\Http\Requests\Api\V1\StoreSacrementExceptionRequest;
+use App\Http\Requests\Api\V1\UpdateSacrementExceptionRequest;
+use App\Http\Resources\Api\V1\SacrementExceptionResource;
+use App\Models\SacrementException;
 use App\Http\Requests\Api\V1\UpdateCatechumenSacrementRequest;
 use App\Http\Resources\Api\V1\CatechumeneSacrementListResource;
 use App\Http\Resources\Api\V1\CatechumenSacrementResource;
@@ -206,5 +210,159 @@ class SacrementController extends Controller
         return is_numeric($catechumeneId)
             ? Catechumene::where('paroisse_configuration_id', $paroisseId)->where('id', $catechumeneId)->firstOrFail()
             : Catechumene::where('paroisse_configuration_id', $paroisseId)->where('uuid', $catechumeneId)->firstOrFail();
+    }
+
+    /**
+     * Candidats au Baptême selon les conditions pastorales.
+     */
+    public function candidatsBapteme(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $filters = $request->all();
+        $paginator = $this->sacrementService->getCandidatsBapteme($paroisseId, $filters);
+
+        return response()->json([
+            'status' => 'success',
+            'meta'   => [
+                'current_page'   => $paginator->currentPage(),
+                'per_page'       => $paginator->perPage(),
+                'total_elements' => $paginator->total(),
+                'total_pages'    => $paginator->lastPage(),
+                'has_next'       => $paginator->hasMorePages(),
+            ],
+            'data'   => CatechumeneSacrementListResource::collection($paginator->items()),
+        ]);
+    }
+
+    /**
+     * Candidats à la Première Communion selon les conditions pastorales.
+     */
+    public function candidatsPremiereCommunion(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $filters = $request->all();
+        $paginator = $this->sacrementService->getCandidatsPremiereCommunion($paroisseId, $filters);
+
+        return response()->json([
+            'status' => 'success',
+            'meta'   => [
+                'current_page'   => $paginator->currentPage(),
+                'per_page'       => $paginator->perPage(),
+                'total_elements' => $paginator->total(),
+                'total_pages'    => $paginator->lastPage(),
+                'has_next'       => $paginator->hasMorePages(),
+            ],
+            'data'   => CatechumeneSacrementListResource::collection($paginator->items()),
+        ]);
+    }
+
+    /**
+     * Candidats à la Confirmation selon les conditions pastorales.
+     */
+    public function candidatsConfirmation(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $filters = $request->all();
+        $paginator = $this->sacrementService->getCandidatsConfirmation($paroisseId, $filters);
+
+        return response()->json([
+            'status' => 'success',
+            'meta'   => [
+                'current_page'   => $paginator->currentPage(),
+                'per_page'       => $paginator->perPage(),
+                'total_elements' => $paginator->total(),
+                'total_pages'    => $paginator->lastPage(),
+                'has_next'       => $paginator->hasMorePages(),
+            ],
+            'data'   => CatechumeneSacrementListResource::collection($paginator->items()),
+        ]);
+    }
+
+    /**
+     * Liste des exceptions pastorales / dérogations.
+     */
+    public function indexExceptions(Request $request): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $filters = $request->all();
+        $exceptions = $this->sacrementService->getExceptions($paroisseId, $filters);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => SacrementExceptionResource::collection($exceptions),
+        ]);
+    }
+
+    /**
+     * Enregistrer une exception pastorale.
+     */
+    public function storeException(StoreSacrementExceptionRequest $request): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $exception = $this->sacrementService->storeException(
+            $paroisseId,
+            $request->validated(),
+            $request->user()
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Dérogation pastorale accordée avec succès.',
+            'data'    => new SacrementExceptionResource($exception),
+        ], 201);
+    }
+
+    /**
+     * Consulter une exception pastorale spécifique.
+     */
+    public function showException(Request $request, string|int $exceptionId): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $exception = SacrementException::where('paroisse_configuration_id', $paroisseId)
+            ->where(function ($q) use ($exceptionId) {
+                $q->where('uuid', $exceptionId)
+                  ->orWhere('id', is_numeric($exceptionId) ? $exceptionId : 0);
+            })
+            ->with(['catechumene.inscriptionsAnnuelles', 'sacrement', 'anneeCatechese'])
+            ->firstOrFail();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => new SacrementExceptionResource($exception),
+        ]);
+    }
+
+    /**
+     * Mettre à jour une exception pastorale.
+     */
+    public function updateException(UpdateSacrementExceptionRequest $request, string|int $exceptionId): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $exception = $this->sacrementService->updateException(
+            $paroisseId,
+            $exceptionId,
+            $request->validated(),
+            $request->user()
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Dérogation pastorale mise à jour avec succès.',
+            'data'    => new SacrementExceptionResource($exception),
+        ]);
+    }
+
+    /**
+     * Supprimer une exception pastorale.
+     */
+    public function destroyException(Request $request, string|int $exceptionId): JsonResponse
+    {
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? 3;
+        $this->sacrementService->deleteException($paroisseId, $exceptionId, $request->user());
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Dérogation pastorale supprimée / révoquée avec succès.',
+        ]);
     }
 }

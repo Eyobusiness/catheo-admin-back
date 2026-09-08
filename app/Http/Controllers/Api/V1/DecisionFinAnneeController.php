@@ -57,7 +57,7 @@ class DecisionFinAnneeController extends Controller
                 ->get();
 
             foreach ($inscriptions as $inscr) {
-                $avgBulletin = BulletinTrimestriel::where('inscription_annuelle_id', $inscr->id)->avg('moyenne_generale');
+                $avgBulletin = BulletinTrimestriel::where('inscription_annuelle_id', $inscr->id)->avg('moyenne_trimestrielle');
                 $moyenne = $avgBulletin ? round((float) $avgBulletin, 2) : 12.00;
                 $defaultDec = $moyenne >= 10.0 ? 'admis' : 'redouble';
 
@@ -132,25 +132,66 @@ class DecisionFinAnneeController extends Controller
             $classeParam = $request->input('classe');
             $anneeParam = $request->input('annee_pastorale') ?? $request->input('anneePastorale');
 
-            $anneeId = AnneeCatechese::where('libelle', $anneeParam)->orWhere('uuid', $anneeParam)->value('id')
+            $anneeId = AnneeCatechese::where('libelle', $anneeParam)->orWhere('uuid', $anneeParam)->orWhere('id', $anneeParam)->value('id')
                 ?? AnneeCatechese::getAnneeCourante($paroisseId)?->id;
 
-            $classeId = Classe::where('nom', $classeParam)->orWhere('uuid', $classeParam)->value('id');
+            $classeId = Classe::where('nom', $classeParam)->orWhere('uuid', $classeParam)->orWhere('id', $classeParam)->value('id');
 
             if ($classeId && $anneeId) {
-                $inscriptions = InscriptionAnnuelle::where('classe_id', $classeId)
+                $inscriptions = InscriptionAnnuelle::with('catechumene')
+                    ->where('classe_id', $classeId)
                     ->where('annee_catechese_id', $anneeId)
                     ->get();
 
+                $deliberations = $request->input('deliberations', []);
+                $delibsKeyed = [];
+                if (is_array($deliberations)) {
+                    foreach ($deliberations as $delib) {
+                        if (!empty($delib['matricule'])) {
+                            $delibsKeyed[strtolower(trim($delib['matricule']))] = $delib;
+                        }
+                        if (!empty($delib['catechumeneId'])) {
+                            $delibsKeyed[$delib['catechumeneId']] = $delib;
+                        }
+                        if (!empty($delib['catechumene_id'])) {
+                            $delibsKeyed[$delib['catechumene_id']] = $delib;
+                        }
+                    }
+                }
+
                 foreach ($inscriptions as $inscr) {
-                    DecisionFinAnnee::firstOrCreate(
+                    $cat = $inscr->catechumene;
+                    $matchedDelib = null;
+                    if ($cat) {
+                        if (!empty($cat->matricule) && isset($delibsKeyed[strtolower(trim($cat->matricule))])) {
+                            $matchedDelib = $delibsKeyed[strtolower(trim($cat->matricule))];
+                        } elseif (!empty($cat->uuid) && isset($delibsKeyed[$cat->uuid])) {
+                            $matchedDelib = $delibsKeyed[$cat->uuid];
+                        } elseif (isset($delibsKeyed[$cat->id])) {
+                            $matchedDelib = $delibsKeyed[$cat->id];
+                        }
+                    }
+
+                    // Décision choisie par l'animateur (priorité absolue)
+                    $chosenDecision = $matchedDelib['decision'] ?? 'Admis';
+                    $moy = isset($matchedDelib['moyenneGenerale']) ? (float)$matchedDelib['moyenneGenerale'] : null;
+
+                    DecisionFinAnnee::updateOrCreate(
                         [
                             'paroisse_configuration_id' => $paroisseId,
                             'inscription_annuelle_id'   => $inscr->id,
                         ],
                         [
-                            'date_decision' => now()->toDateString(),
-                            'decision'      => 'admis',
+                            'decision'         => $chosenDecision,
+                            'moyenne_annuelle' => $moy,
+                            'date_decision'    => now()->toDateString(),
+                            'observations'     => json_encode([
+                                'presenceCoursNb'   => $matchedDelib['presenceCoursNb'] ?? null,
+                                'presenceMesse'     => $matchedDelib['presenceMesse'] ?? 0,
+                                'presenceCEB'       => $matchedDelib['presenceCEB'] ?? 0,
+                                'presenceMouvement' => $matchedDelib['presenceMouvement'] ?? 0,
+                                'decision'          => $chosenDecision,
+                            ]),
                         ]
                     );
                 }

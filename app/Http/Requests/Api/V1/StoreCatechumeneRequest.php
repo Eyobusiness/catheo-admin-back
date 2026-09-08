@@ -14,7 +14,11 @@ class StoreCatechumeneRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'ceb_id'                       => ['nullable', 'string', 'exists:cebs,uuid'],
+            'ceb_id'                       => ['nullable', 'string'],
+            'section_id'                   => ['nullable', 'string'],
+            'niveau_id'                    => ['nullable', 'string'],
+            'classe_id'                    => ['nullable', 'string'],
+            'annee_catechese_id'           => ['nullable', 'string'],
             'nom'                          => ['required', 'string', 'max:255'],
             'prenoms'                      => ['required', 'string', 'max:255'],
             'sexe'                         => ['required', 'string', 'in:M,F'],

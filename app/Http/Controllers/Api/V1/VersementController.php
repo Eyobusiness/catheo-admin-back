@@ -84,16 +84,33 @@ class VersementController extends Controller
             $versementQuery->where('paroisse_configuration_id', $paroisseId);
         }
 
-        $totalEncaisseCaisse = (float) $caisseQuery->whereIn('type_mouvement', ['entree', 'recette'])->sum('montant');
+        if ($request->filled('annee_catechese_id')) {
+            $val = $request->annee_catechese_id;
+            if ($val !== 'all' && $val !== 'tous') {
+                $anneeId = is_numeric($val) ? (int) $val : AnneeCatechese::where('uuid', $val)->value('id');
+                if ($anneeId) {
+                    $caisseQuery->where('annee_catechese_id', $anneeId);
+                    $versementQuery->where('annee_catechese_id', $anneeId);
+                }
+            }
+        }
+
+        $totalEncaisseCaisse = (float) (clone $caisseQuery)->whereIn('type_mouvement', ['entree', 'recette'])->sum('montant');
+        $totalSortiesCaisse = (float) (clone $caisseQuery)->whereIn('type_mouvement', ['sortie', 'depense', 'remboursement'])->sum('montant');
         $totalVerse = (float) $versementQuery->sum('montant_verse');
-        $resteAReverser = max(0, $totalEncaisseCaisse - $totalVerse);
+        
+        // Le montant restant à reverser est exactement le solde disponible en caisse
+        $resteAReverser = max(0, $totalEncaisseCaisse - $totalSortiesCaisse - $totalVerse);
 
         return response()->json([
             'status' => 'success',
             'kpis' => [
                 'total_en_caisse'  => $totalEncaisseCaisse,
+                'total_encaisse'   => $totalEncaisseCaisse,
+                'total_sorties'    => $totalSortiesCaisse,
                 'total_deja_verse' => $totalVerse,
                 'reste_a_reverser' => $resteAReverser,
+                'solde_en_caisse'  => $resteAReverser,
             ],
             'data' => VersementResource::collection($versements->items()),
             'meta' => [

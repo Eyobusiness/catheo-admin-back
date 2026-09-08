@@ -46,6 +46,8 @@ class InitialSetupSeeder extends Seeder
             [
                 'nom_paroisse'     => 'Paroisse Cathédrale Saint-Paul',
                 'code_paroisse'    => 'PAR-STPAUL-01',
+                'prefixe_matricule'=> 'SP',
+                'prefixe_recu'     => 'REC',
                 'diocese'          => 'Archidiocèse d\'Abidjan',
                 'doyenne'          => 'Doyenne Monseigneur Laurent Yapi',
                 'ville'            => 'Abidjan',

@@ -11,19 +11,49 @@ class UpdateEvaluationRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $data = $this->all();
+
+        if (isset($data['nom']) && !isset($data['titre'])) {
+            $data['titre'] = $data['nom'];
+        }
+        if (isset($data['observation']) && !isset($data['description'])) {
+            $data['description'] = $data['observation'];
+        }
+        if (isset($data['type']) && !isset($data['type_eval'])) {
+            $data['type_eval'] = strtolower($data['type']);
+        }
+        if (isset($data['bareme']) && !isset($data['note_max'])) {
+            $data['note_max'] = $data['bareme'];
+        }
+        if (isset($data['date']) && !isset($data['date_evaluation'])) {
+            $data['date_evaluation'] = $data['date'];
+        }
+        if (isset($data['anneePastorale']) && !isset($data['annee_catechese_id'])) {
+            $data['annee_catechese_id'] = $data['anneePastorale'];
+        }
+        if (isset($data['classe']) && !isset($data['classe_id']) && is_string($data['classe'])) {
+            $data['classe_id'] = $data['classe'];
+        }
+
+        $this->merge($data);
+    }
+
     public function rules(): array
     {
         return [
-            'annee_catechese_id' => ['sometimes', 'required', 'string', 'exists:annee_catecheses,uuid'],
-            'module_trimestriel_id' => ['sometimes', 'required', 'string', 'exists:modules_trimestriels,uuid'],
-            'classe_id' => ['sometimes', 'required', 'string', 'exists:classes,uuid'],
-            'titre' => ['sometimes', 'required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'type_eval' => ['sometimes', 'required', 'string', 'in:interrogation,composition,examen,oral,devoir,comportement'],
-            'coefficient' => ['sometimes', 'required', 'numeric', 'min:0.1', 'max:10.0'],
-            'note_max' => ['sometimes', 'required', 'numeric', 'min:1.0', 'max:100.0'],
-            'date_evaluation' => ['sometimes', 'required', 'date'],
-            'statut' => ['sometimes', 'required', 'string', 'in:actif,inactif'],
+            'titre'                 => ['sometimes', 'required', 'string', 'max:255'],
+            'description'           => ['nullable', 'string'],
+            'type_eval'             => ['nullable', 'string'],
+            'coefficient'           => ['nullable', 'numeric', 'min:0.1', 'max:20'],
+            'note_max'              => ['nullable', 'numeric', 'min:1', 'max:100'],
+            'date_evaluation'       => ['sometimes', 'required', 'date'],
+            'statut'                => ['nullable', 'string'],
+            'annee_catechese_id'    => ['nullable', 'string'],
+            'classe_id'             => ['nullable', 'string'],
+            'module_trimestriel_id' => ['nullable', 'string'],
+            'periode'               => ['nullable', 'string'],
         ];
     }
 }

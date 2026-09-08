@@ -384,8 +384,30 @@ class ImpressionController extends Controller
             ? Classe::with(['niveau.section', 'affectations.animateur'])->where('uuid', $validated['classe_id'])->orWhere('id', $validated['classe_id'])->first()
             : null;
 
-        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)->get();
+        $inscriptions = $this->getInscriptionsQuery($paroisse->id, $annee?->id, $classe?->id, $validated)
+            ->get()
+            ->sortBy(fn($ins) => mb_strtoupper(($ins->catechumene?->nom ?? '') . ' ' . ($ins->catechumene?->prenoms ?? $ins->catechumene?->prenom ?? '')))
+            ->values();
+
         $animateurs = $classe ? $classe->affectations->map(fn($a) => trim($a->animateur->nom . ' ' . ($a->animateur->prenoms ?? $a->animateur->prenom ?? '')))->values()->toArray() : [];
+
+        // Récupérer les moyennes calculées depuis EvaluationService si la classe est définie
+        $moyennesByCat = [];
+        if ($classe) {
+            try {
+                $evalService = app(\App\Services\EvaluationService::class);
+                $evalRes = $evalService->getClasseMoyennes($request->user() ?? \App\Models\User::first(), $classe->id, $annee?->id);
+                if (!empty($evalRes['eleves'])) {
+                    foreach ($evalRes['eleves'] as $el) {
+                        $mVal = $el['moyenne'] ?? null;
+                        if ($mVal !== null && $mVal !== '') {
+                            if (!empty($el['catechumene_id'])) $moyennesByCat[$el['catechumene_id']] = (float) $mVal;
+                            if (!empty($el['matricule'])) $moyennesByCat[$el['matricule']] = (float) $mVal;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
 
         // Charger les décisions de fin d'année et bulletins si existants
         $insIds = $inscriptions->pluck('id');
@@ -393,27 +415,81 @@ class ImpressionController extends Controller
             ->get()
             ->keyBy('inscription_annuelle_id');
 
-        $rows = $inscriptions->map(function ($ins, $index) use ($decisions) {
+        $rows = $inscriptions->map(function ($ins, $index) use ($decisions, $moyennesByCat, $classe, $annee) {
             $cat = $ins->catechumene;
             $prenom = $cat->prenoms ?? ($cat->prenom ?? '');
             $decision = $decisions->get($ins->id);
 
+            // Déterminer la moyenne exacte (décision enregistrée ou calculée depuis les évaluations)
+            $moyVal = null;
+            if ($decision && $decision->moyenne_annuelle !== null && $decision->moyenne_annuelle !== '') {
+                $moyVal = round($decision->moyenne_annuelle, 2);
+            } elseif (isset($moyennesByCat[$cat->uuid])) {
+                $moyVal = round($moyennesByCat[$cat->uuid], 2);
+            } elseif (isset($moyennesByCat[$cat->matricule])) {
+                $moyVal = round($moyennesByCat[$cat->matricule], 2);
+            }
+
+            // Calcul du nombre de présences réelles aux cours
+            $pCoursNb = \App\Models\Presence::where('catechumene_id', $cat->id)
+                ->whereIn('statut_presence', ['present', 'retard'])
+                ->whereHas('seance', function ($sq) use ($classe, $annee) {
+                    if ($classe) $sq->where('classe_id', $classe->id);
+                    if ($annee) $sq->where('annee_catechese_id', $annee->id);
+                })->count();
+
+            $pCours = $pCoursNb > 0 ? $pCoursNb : ($decision?->note_assiduite ?? '');
+            $pMesse = $decision?->note_assiduite ?? '';
+
+            // Décision retenue : La décision validée/enregistrée par l'animateur prime en priorité absolue
+            $decText = '';
+            if ($decision && !empty($decision->decision)) {
+                $decRaw = strtolower(trim($decision->decision));
+                if ($decRaw === 'admis' || $decRaw === 'sacrement_valide') {
+                    $decText = 'Admis';
+                } elseif ($decRaw === 'ajourne' || $decRaw === 'ajourné') {
+                    $decText = 'Ajourné';
+                } elseif ($decRaw === 'non admis' || $decRaw === 'non_admis' || $decRaw === 'redouble' || $decRaw === 'exclu') {
+                    $decText = 'Non admis';
+                } else {
+                    $decText = ucfirst($decRaw);
+                }
+            }
+
+            // Seulement si aucune décision n'a été enregistrée par l'animateur, suggestion selon la moyenne
+            if (!$decText && $moyVal !== null) {
+                if ($moyVal >= 10) $decText = 'Admis';
+                elseif ($moyVal >= 8.5) $decText = 'Ajourné';
+                else $decText = 'Non admis';
+            }
+
             return [
-                'numero'           => sprintf('%02d', $index + 1),
-                'matricule'        => $cat->matricule,
-                'code_catechumene' => $cat->matricule,
-                'nom'              => mb_strtoupper($cat->nom),
-                'prenom'           => $prenom,
-                'prenoms'          => $prenom,
-                'nom_complet'      => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
-                'nomPrenoms'       => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
-                'cours'            => $decision?->moyenne_annuelle ? round($decision->moyenne_annuelle, 2) : '',
-                'messe'            => $decision?->note_assiduite ?? '',
-                'ceb'              => '',
-                'mouvt'            => '',
-                'moyenne'          => $decision?->moyenne_annuelle ? round($decision->moyenne_annuelle, 2) : '',
-                'decision'         => $decision?->decision ?? '',
-                'observation'      => $decision?->observations ?? '',
+                'numero'              => sprintf('%02d', $index + 1),
+                'num'                 => sprintf('%02d', $index + 1),
+                'id'                  => $cat->uuid ?? (string) $cat->id,
+                'catechumene_id'      => $cat->uuid ?? (string) $cat->id,
+                'matricule'           => $cat->matricule,
+                'code_catechumene'    => $cat->matricule,
+                'nom'                 => mb_strtoupper($cat->nom),
+                'prenom'              => $prenom,
+                'prenoms'             => $prenom,
+                'nom_complet'         => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'nomPrenoms'          => trim(mb_strtoupper($cat->nom) . ' ' . $prenom),
+                'telephone'           => $cat->telephone ?? $cat->contact ?? '-',
+                'contact'             => $cat->telephone ?? $cat->contact ?? '-',
+                'cours'               => $pCours,
+                'presences_cours'     => $pCours,
+                'messe'               => $pMesse,
+                'presences_messe'     => $pMesse,
+                'ceb'                 => '',
+                'presences_ceb'       => '',
+                'mouvt'               => '',
+                'presences_mouvement' => '',
+                'moyenne'             => $moyVal !== null ? "{$moyVal} / 20" : '',
+                'moyenne_generale'    => $moyVal,
+                'moyenne_annuelle'    => $moyVal,
+                'decision'            => $decText,
+                'observation'         => $decision?->observations ?? '',
             ];
         });
 

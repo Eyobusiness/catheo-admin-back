@@ -71,6 +71,21 @@ Route::get('/campagnes-preinscriptions/public/{uuid}', [CampagnePreinscriptionCo
 Route::post('/public/preinscriptions', [PreinscriptionController::class, 'store'])->middleware('throttle:preinscription');
 Route::post('/preinscriptions', [PreinscriptionController::class, 'store'])->middleware('throttle:preinscription');
 
+// ─────────────────────────────────────────────────────────────────
+// DONNÉES PUBLIQUES POUR LE FORMULAIRE DE PRÉINSCRIPTION (SANS JETON)
+// ─────────────────────────────────────────────────────────────────
+Route::get('/sections', [SectionController::class, 'index']);
+Route::get('/sections/{section}', [SectionController::class, 'show']);
+Route::get('/niveaux', [NiveauController::class, 'index']);
+Route::get('/niveaux/{niveau}', [NiveauController::class, 'show']);
+Route::get('/cebs', [CebController::class, 'index']);
+Route::get('/cebs/{ceb}', [CebController::class, 'show']);
+Route::get('/mouvements', [MouvementController::class, 'index']);
+Route::get('/mouvements/{mouvement}', [MouvementController::class, 'show']);
+Route::get('/campagnes-preinscriptions', [CampagnePreinscriptionController::class, 'index']);
+Route::get('/campagnes-preinscriptions/{campagne}', [CampagnePreinscriptionController::class, 'show']);
+Route::get('/catechumenes/matricule/{code}', [CatechumeneController::class, 'showByMatricule'])->middleware('throttle:30,1');
+
 // Authentification & Session Utilisateur (Protégée anti-brute force)
 Route::prefix('auth')->group(function () {
     // 1. Connexion Administration & Personnel (Table users)
@@ -127,19 +142,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // PHASE 2 — Paramètres Catéchèse, Paroisse, Apparence & Sauvegardes
     // Permissions : settings.manage
     // ─────────────────────────────────────────────────────────────────
-    Route::get('/catechese-configuration', [CatecheseConfigurationController::class, 'show']);
     Route::put('/catechese-configuration', [CatecheseConfigurationController::class, 'update'])
         ->middleware('permission:settings.manage');
     Route::post('/catechese-configuration', [CatecheseConfigurationController::class, 'update'])
         ->middleware('permission:settings.manage');
 
-    Route::get('/paroisse-configuration', [CatecheseConfigurationController::class, 'show']);
     Route::put('/paroisse-configuration', [CatecheseConfigurationController::class, 'update'])
         ->middleware('permission:settings.manage');
     Route::post('/paroisse-configuration', [CatecheseConfigurationController::class, 'update'])
         ->middleware('permission:settings.manage');
-
-    Route::get('/apparence-configuration', [ApparenceConfigurationController::class, 'show']);
     Route::middleware('permission:settings.manage')->group(function () {
         Route::put('/apparence-configuration', [ApparenceConfigurationController::class, 'update']);
         Route::post('/apparence-configuration/reset', [ApparenceConfigurationController::class, 'reset']);
@@ -163,16 +174,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/annee-catecheses', [AnneeCatecheseController::class, 'index']);
         Route::get('/annee-catecheses/current', [AnneeCatecheseController::class, 'current']);
         Route::get('/annee-catecheses/{annee}', [AnneeCatecheseController::class, 'show']);
-        Route::get('/sections', [SectionController::class, 'index']);
-        Route::get('/sections/{section}', [SectionController::class, 'show']);
-        Route::get('/niveaux', [NiveauController::class, 'index']);
-        Route::get('/niveaux/{niveau}', [NiveauController::class, 'show']);
         Route::get('/classes', [ClasseController::class, 'index']);
         Route::get('/classes/{classe}', [ClasseController::class, 'show']);
-        Route::get('/cebs', [CebController::class, 'index']);
-        Route::get('/cebs/{ceb}', [CebController::class, 'show']);
-        Route::get('/mouvements', [MouvementController::class, 'index']);
-        Route::get('/mouvements/{mouvement}', [MouvementController::class, 'show']);
         Route::get('/calendriers', [CalendrierController::class, 'index']);
         Route::get('/calendriers/{calendrier}', [CalendrierController::class, 'show']);
         Route::get('/animateurs', [AnimateurController::class, 'index']);
@@ -250,12 +253,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Permissions : catechumenes.view | create | edit | delete
     // ─────────────────────────────────────────────────────────────────
     Route::middleware('permission:catechumenes.view')->group(function () {
-        Route::apiResource('campagnes-preinscriptions', CampagnePreinscriptionController::class)
-            ->parameters(['campagnes-preinscriptions' => 'campagne'])
-            ->only(['index', 'show']);
         Route::get('/preinscriptions', [PreinscriptionController::class, 'index']);
         Route::get('/preinscriptions/{preinscription}', [PreinscriptionController::class, 'show']);
-        Route::get('/catechumenes/matricule/{code}', [CatechumeneController::class, 'showByMatricule']);
         Route::get('/catechumenes', [CatechumeneController::class, 'index']);
         Route::get('/catechumenes/{catechumene}/fiche-impression', [CatechumeneController::class, 'ficheImpression']);
         Route::get('/catechumenes/{catechumene}/pdf', [CatechumeneController::class, 'ficheImpression']);
@@ -324,18 +323,24 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─────────────────────────────────────────────────────────────────
     Route::middleware('permission:catechumenes.view')->group(function () {
         Route::get('/sacrements', [SacrementController::class, 'index']);
-        Route::get('/sacrements/{sacrement}', [SacrementController::class, 'show']);
+        Route::get('/sacrements/exceptions', [SacrementController::class, 'indexExceptions']);
+        Route::get('/sacrements/exceptions/{exception}', [SacrementController::class, 'showException']);
         Route::get('/sacrements/catechumens', [SacrementController::class, 'catechumens']);
         Route::get('/sacrements/catechumenes', [SacrementController::class, 'catechumens']);
+        Route::get('/sacrements/candidats/bapteme', [SacrementController::class, 'candidatsBapteme']);
+        Route::get('/sacrements/candidats/premiere-communion', [SacrementController::class, 'candidatsPremiereCommunion']);
+        Route::get('/sacrements/candidats/confirmation', [SacrementController::class, 'candidatsConfirmation']);
         Route::get('/catechumenes/{catechumene}/sacrements', [SacrementController::class, 'parcours']);
         Route::get('/catechumens/{catechumene}/sacrements', [SacrementController::class, 'parcours']);
         Route::get('/catechumenes/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'showParcours']);
         Route::get('/catechumens/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'showParcours']);
+        Route::get('/sacrements/{sacrement}', [SacrementController::class, 'show']);
     });
 
     Route::middleware('permission:catechumenes.create')->group(function () {
         Route::post('/catechumenes/{catechumene}/sacrements', [SacrementController::class, 'storeParcours']);
         Route::post('/catechumens/{catechumene}/sacrements', [SacrementController::class, 'storeParcours']);
+        Route::post('/sacrements/exceptions', [SacrementController::class, 'storeException']);
     });
 
     Route::middleware('permission:catechumenes.edit')->group(function () {
@@ -343,11 +348,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/catechumens/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'updateParcours']);
         Route::patch('/catechumenes/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'updateParcours']);
         Route::patch('/catechumens/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'updateParcours']);
+        Route::put('/sacrements/exceptions/{exception}', [SacrementController::class, 'updateException']);
+        Route::patch('/sacrements/exceptions/{exception}', [SacrementController::class, 'updateException']);
     });
 
     Route::middleware('permission:catechumenes.delete')->group(function () {
         Route::delete('/catechumenes/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'destroyParcours']);
         Route::delete('/catechumens/{catechumene}/sacrements/{sacrement}', [SacrementController::class, 'destroyParcours']);
+        Route::delete('/sacrements/exceptions/{exception}', [SacrementController::class, 'destroyException']);
     });
 
     // ─────────────────────────────────────────────────────────────────
@@ -364,6 +372,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('permission:evaluations.view')->group(function () {
         Route::get('/evaluations', [EvaluationController::class, 'index']);
+        Route::get('/evaluations/classes/{classe}/moyennes', [EvaluationController::class, 'classeMoyennes']);
+        Route::get('/evaluations/catechumenes/{catechumene}/synthese', [EvaluationController::class, 'catechumeneSynthese']);
+        Route::get('/classes/{classe}/moyennes-evaluations', [EvaluationController::class, 'classeMoyennes']);
+        Route::get('/catechumenes/{catechumene}/synthese-evaluations', [EvaluationController::class, 'catechumeneSynthese']);
         Route::get('/evaluations/{evaluation}', [EvaluationController::class, 'show']);
         Route::get('/evaluations/{evaluation}/notes-grid', [EvaluationController::class, 'notesGrid']);
         Route::get('/evaluations/{evaluation}/notes', [EvaluationController::class, 'getNotes']);

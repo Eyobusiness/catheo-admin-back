@@ -14636,77 +14636,109 @@
         "/evaluations": {
             "get": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[GET] Liste des devoirs et évaluations",
-                "description": "Récupère la liste des contrôles continus et examens.",
+                "summary": "Liste des évaluations",
+                "description": "Retourne la liste des évaluations selon les filtres pastoraux (session/section, niveau, classe, année, type, statut, recherche). Les enseignants (animateurs) sont automatiquement restreints à leurs classes assignées.",
+                "operationId": "getEvaluationsList",
                 "security": [
                     {
                         "bearerAuth": []
                     }
                 ],
+                "parameters": [
+                    {
+                        "name": "section_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID de la session/section (Enfants, Jeunes, Adultes)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "session_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "Alias pour section_id",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "niveau_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID du niveau",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "classe_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID de la classe",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "description": "UUID ou ID de l'année de catéchèse",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "type_eval",
+                        "in": "query",
+                        "required": false,
+                        "description": "Type d'évaluation (interrogation, devoir, composition, examen, oral)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "statut",
+                        "in": "query",
+                        "required": false,
+                        "description": "Statut (actif, inactif)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "required": false,
+                        "description": "Recherche par titre ou description",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "Liste des évaluations",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/EvaluationDto"
-                                    }
-                                },
-                                "example": [
-                                    {
-                                        "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                        "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                        "titre": "Devoir de Synthèse Trimestre 1",
-                                        "type_evaluation": "devoir",
-                                        "date_evaluation": "2026-11-28",
-                                        "note_maximale": 20,
-                                        "coefficient": 2,
-                                        "statut": "publiee"
-                                    }
-                                ]
-                            }
-                        }
+                        "description": "Liste des évaluations filtrées"
                     },
                     "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                        "description": "Non authentifié"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé"
                     }
                 }
             },
             "post": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[POST] Créer une nouvelle évaluation",
-                "description": "Définit un devoir ou une interrogation avec coefficient et note max.",
+                "summary": "Créer une évaluation",
+                "description": "Crée une nouvelle évaluation dans une classe. L'enseignant ne peut créer que dans une classe à laquelle il est affecté.",
+                "operationId": "createEvaluation",
                 "security": [
                     {
                         "bearerAuth": []
@@ -14717,92 +14749,71 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/EvaluationDto"
-                            },
-                            "example": {
-                                "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                "titre": "Devoir de Synthèse Trimestre 1",
-                                "type_evaluation": "devoir",
-                                "date_evaluation": "2026-11-28",
-                                "note_maximale": 20,
-                                "coefficient": 2,
-                                "statut": "publiee"
+                                "type": "object",
+                                "required": [
+                                    "titre",
+                                    "date_evaluation"
+                                ],
+                                "properties": {
+                                    "titre": {
+                                        "type": "string",
+                                        "example": "Interrogation 1"
+                                    },
+                                    "coefficient": {
+                                        "type": "number",
+                                        "example": 1
+                                    },
+                                    "note_max": {
+                                        "type": "number",
+                                        "example": 20
+                                    },
+                                    "date_evaluation": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-09-04"
+                                    },
+                                    "type_eval": {
+                                        "type": "string",
+                                        "example": "interrogation"
+                                    },
+                                    "classe_id": {
+                                        "type": "string",
+                                        "example": "uuid-classe"
+                                    },
+                                    "annee_catechese_id": {
+                                        "type": "string",
+                                        "example": "uuid-annee"
+                                    },
+                                    "module_trimestriel_id": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "statut": {
+                                        "type": "string",
+                                        "enum": [
+                                            "actif",
+                                            "inactif"
+                                        ],
+                                        "default": "actif"
+                                    }
+                                }
                             }
                         }
                     }
                 },
                 "responses": {
                     "201": {
-                        "description": "Évaluation créée",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EvaluationDto"
-                                },
-                                "example": {
-                                    "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                    "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                    "titre": "Devoir de Synthèse Trimestre 1",
-                                    "type_evaluation": "devoir",
-                                    "date_evaluation": "2026-11-28",
-                                    "note_maximale": 20,
-                                    "coefficient": 2,
-                                    "statut": "publiee"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Données fournies invalides (Erreur de validation)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ValidationErrorResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Les données fournies sont invalides.",
-                                    "errors": {
-                                        "email": [
-                                            "Le champ email est obligatoire.",
-                                            "Le format de l'adresse email est invalide."
-                                        ],
-                                        "password": [
-                                            "Le mot de passe doit comporter au moins 8 caractères."
-                                        ]
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                        "description": "Évaluation créée avec succès"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé pour cette classe"
+                    },
+                    "422": {
+                        "description": "Erreur de validation"
                     }
                 }
             }
@@ -14810,10 +14821,11 @@
         "/evaluations/{id}": {
             "get": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[GET] Détails d'une évaluation et statistiques de notes",
-                "description": "Renvoie les informations complètes d'un devoir.",
+                "summary": "Détails d'une évaluation",
+                "description": "Retourne les informations de l'évaluation, barème, coefficient, session, niveau, classe et statistiques.",
+                "operationId": "getEvaluationById",
                 "security": [
                     {
                         "bearerAuth": []
@@ -14824,85 +14836,29 @@
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "description": "UUID de l'évaluation",
                         "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c"
+                            "type": "string"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Détails de l'évaluation",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EvaluationDto"
-                                },
-                                "example": {
-                                    "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                    "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                    "titre": "Devoir de Synthèse Trimestre 1",
-                                    "type_evaluation": "devoir",
-                                    "date_evaluation": "2026-11-28",
-                                    "note_maximale": 20,
-                                    "coefficient": 2,
-                                    "statut": "publiee"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                        "description": "Détails de l'évaluation"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé"
                     },
                     "404": {
-                        "description": "Ressource introuvable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/NotFoundResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Ressource introuvable ou inexistante pour cette paroisse."
-                                }
-                            }
-                        }
+                        "description": "Évaluation introuvable"
                     }
                 }
             },
             "put": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[PUT] Modifier une évaluation",
-                "description": "Met à jour les paramètres de l'évaluation.",
+                "summary": "Modifier une évaluation",
+                "operationId": "updateEvaluation",
                 "security": [
                     {
                         "bearerAuth": []
@@ -14913,11 +14869,8 @@
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "description": "UUID de l'évaluation",
                         "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c"
+                            "type": "string"
                         }
                     }
                 ],
@@ -14926,115 +14879,54 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/EvaluationDto"
-                            },
-                            "example": {
-                                "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                "titre": "Devoir de Synthèse Trimestre 1",
-                                "type_evaluation": "devoir",
-                                "date_evaluation": "2026-11-28",
-                                "note_maximale": 20,
-                                "coefficient": 2,
-                                "statut": "publiee"
+                                "type": "object",
+                                "properties": {
+                                    "titre": {
+                                        "type": "string"
+                                    },
+                                    "coefficient": {
+                                        "type": "number"
+                                    },
+                                    "note_max": {
+                                        "type": "number"
+                                    },
+                                    "date_evaluation": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "type_eval": {
+                                        "type": "string"
+                                    },
+                                    "description": {
+                                        "type": "string"
+                                    },
+                                    "statut": {
+                                        "type": "string"
+                                    }
+                                }
                             }
                         }
                     }
                 },
                 "responses": {
                     "200": {
-                        "description": "Évaluation mise à jour",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EvaluationDto"
-                                },
-                                "example": {
-                                    "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                    "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                    "titre": "Devoir de Synthèse Trimestre 1",
-                                    "type_evaluation": "devoir",
-                                    "date_evaluation": "2026-11-28",
-                                    "note_maximale": 20,
-                                    "coefficient": 2,
-                                    "statut": "publiee"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Données fournies invalides (Erreur de validation)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ValidationErrorResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Les données fournies sont invalides.",
-                                    "errors": {
-                                        "email": [
-                                            "Le champ email est obligatoire.",
-                                            "Le format de l'adresse email est invalide."
-                                        ],
-                                        "password": [
-                                            "Le mot de passe doit comporter au moins 8 caractères."
-                                        ]
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                        "description": "Évaluation modifiée"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé"
                     },
-                    "404": {
-                        "description": "Ressource introuvable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/NotFoundResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Ressource introuvable ou inexistante pour cette paroisse."
-                                }
-                            }
-                        }
+                    "422": {
+                        "description": "Erreur de validation"
                     }
                 }
             },
             "delete": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[DELETE] Supprimer une évaluation",
-                "description": "Supprime une évaluation.",
+                "summary": "Supprimer une évaluation",
+                "description": "Supprime l'évaluation et traite les notes associées en transaction DB.",
+                "operationId": "deleteEvaluation",
                 "security": [
                     {
                         "bearerAuth": []
@@ -15045,70 +14937,17 @@
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "description": "UUID de l'évaluation",
                         "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c"
+                            "type": "string"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Évaluation supprimée",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                },
-                                "example": {
-                                    "status": "success",
-                                    "message": "Évaluation supprimée avec succès."
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                        "description": "Évaluation supprimée avec succès"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Ressource introuvable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/NotFoundResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Ressource introuvable ou inexistante pour cette paroisse."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé"
                     }
                 }
             }
@@ -15116,10 +14955,11 @@
         "/evaluations/{id}/notes-grid": {
             "get": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[GET] Grille de saisie des notes pour les catéchistes",
-                "description": "Renvoie la liste des élèves de la classe avec leurs notes actuelles pour saisie rapide.",
+                "summary": "Grille de saisie des notes pour les élèves de la classe",
+                "description": "Fournit la liste des catéchumènes inscrits dans la classe de l'évaluation avec leurs notes actuelles pour saisie rapide.",
+                "operationId": "getEvaluationNotesGrid",
                 "security": [
                     {
                         "bearerAuth": []
@@ -15130,87 +14970,36 @@
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "description": "UUID de l'évaluation",
                         "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c"
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Grille de saisie",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                },
-                                "example": {
-                                    "status": "success",
-                                    "data": [
-                                        {
-                                            "catechumene_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d42",
-                                            "nom_complet": "KOUADIO Ferdinand",
-                                            "valeur_note": 16.5
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                        "description": "Grille de catéchumènes et notes existantes"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Ressource introuvable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/NotFoundResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Ressource introuvable ou inexistante pour cette paroisse."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé"
                     }
                 }
             }
         },
         "/evaluations/{id}/notes": {
-            "post": {
+            "get": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[POST] Enregistrer les notes en lot pour une classe",
-                "description": "Sauvegarde l'ensemble des notes saisies par l'animateur.",
+                "summary": "Liste des notes d'une évaluation",
+                "operationId": "getEvaluationNotes",
                 "security": [
                     {
                         "bearerAuth": []
@@ -15221,11 +15010,36 @@
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "description": "UUID de l'évaluation",
                         "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c"
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Liste des notes"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "7. Évaluations & Bulletins"
+                ],
+                "summary": "Enregistrement en lot des notes pour une évaluation",
+                "description": "Enregistre ou met à jour plusieurs notes en une seule transaction. Valide 0 <= note <= note_max. Recalcule automatiquement les moyennes.",
+                "operationId": "saveEvaluationNotesBatch",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 ],
@@ -15234,104 +15048,47 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/BatchNoteRequestDto"
-                            },
-                            "example": {
-                                "notes": [
-                                    {
-                                        "catechumene_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d42",
-                                        "valeur_note": 16.5,
-                                        "appreciation": "Très bon travail"
-                                    },
-                                    {
-                                        "catechumene_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d43",
-                                        "valeur_note": 14,
-                                        "appreciation": "Bien"
+                                "type": "object",
+                                "required": [
+                                    "notes"
+                                ],
+                                "properties": {
+                                    "notes": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "catechumene_id"
+                                            ],
+                                            "properties": {
+                                                "catechumene_id": {
+                                                    "type": "string"
+                                                },
+                                                "note_obtenue": {
+                                                    "type": "number",
+                                                    "nullable": true
+                                                },
+                                                "appreciation": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            }
+                                        }
                                     }
-                                ]
+                                }
                             }
                         }
                     }
                 },
                 "responses": {
                     "200": {
-                        "description": "Notes enregistrées avec succès",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                },
-                                "example": {
-                                    "status": "success",
-                                    "message": "Notes enregistrées avec succès."
-                                }
-                            }
-                        }
+                        "description": "Notes enregistrées et moyennes recalculées"
                     },
-                    "400": {
-                        "description": "Données fournies invalides (Erreur de validation)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ValidationErrorResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Les données fournies sont invalides.",
-                                    "errors": {
-                                        "email": [
-                                            "Le champ email est obligatoire.",
-                                            "Le format de l'adresse email est invalide."
-                                        ],
-                                        "password": [
-                                            "Le mot de passe doit comporter au moins 8 caractères."
-                                        ]
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
+                    "422": {
+                        "description": "Erreur de validation (note supérieure au barème, etc.)"
                     },
                     "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Ressource introuvable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/NotFoundResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Ressource introuvable ou inexistante pour cette paroisse."
-                                }
-                            }
-                        }
+                        "description": "Accès refusé"
                     }
                 }
             }
@@ -15427,10 +15184,10 @@
         "/evaluations/{id}/status": {
             "patch": {
                 "tags": [
-                    "7. Présences, Évaluations & Bulletins"
+                    "7. Évaluations & Bulletins"
                 ],
-                "summary": "[PATCH] Clôturer ou publier une évaluation",
-                "description": "Bascule l'état de publication des notes.",
+                "summary": "Basculer le statut d'une évaluation (actif/inactif)",
+                "operationId": "toggleEvaluationStatus",
                 "security": [
                     {
                         "bearerAuth": []
@@ -15441,76 +15198,14 @@
                         "name": "id",
                         "in": "path",
                         "required": true,
-                        "description": "UUID de l'évaluation",
                         "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d4c"
+                            "type": "string"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Statut d'évaluation mis à jour",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EvaluationDto"
-                                },
-                                "example": {
-                                    "id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d51",
-                                    "classe_id": "9f8e7d6c-5b4a-3f2e-1d0c-9b8a7f6e5d23",
-                                    "titre": "Devoir de Synthèse Trimestre 1",
-                                    "type_evaluation": "devoir",
-                                    "date_evaluation": "2026-11-28",
-                                    "note_maximale": 20,
-                                    "coefficient": 2,
-                                    "statut": "publiee"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Non authentifié (Jeton Bearer Sanctum manquant ou expiré)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnauthenticatedResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Non authentifié. Jeton d'accès manquant ou expiré."
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Accès interdit (Permissions insuffisantes pour cette paroisse)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ForbiddenResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Action non autorisée. Vous ne disposez pas des permissions requises."
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Ressource introuvable",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/NotFoundResponseDto"
-                                },
-                                "example": {
-                                    "status": "error",
-                                    "message": "Ressource introuvable ou inexistante pour cette paroisse."
-                                }
-                            }
-                        }
+                        "description": "Statut mis à jour"
                     }
                 }
             }
@@ -23544,6 +23239,179 @@
                     },
                     "404": {
                         "description": "Document généré introuvable"
+                    }
+                }
+            }
+        },
+        "/evaluations/classes/{classe}/moyennes": {
+            "get": {
+                "tags": [
+                    "7. Évaluations & Bulletins"
+                ],
+                "summary": "Calcul automatique des moyennes de classe",
+                "description": "Source de vérité backend pour les moyennes. Calcule la moyenne pondérée de chaque catéchumène à partir des évaluations notées (les non notées ne comptent pas comme 0). Retourne également les statistiques de classe (moyenne classe, plus forte, plus faible note).",
+                "operationId": "getClasseMoyennes",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "classe",
+                        "in": "path",
+                        "required": true,
+                        "description": "UUID ou ID de la classe",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Moyennes de classe et détails de chaque élève",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "classe": {
+                                                    "type": "object"
+                                                },
+                                                "statistiques": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "total_evaluations": {
+                                                            "type": "integer"
+                                                        },
+                                                        "total_eleves": {
+                                                            "type": "integer"
+                                                        },
+                                                        "eleves_evalues": {
+                                                            "type": "integer"
+                                                        },
+                                                        "eleves_non_evalues": {
+                                                            "type": "integer"
+                                                        },
+                                                        "moyenne_classe": {
+                                                            "type": "number",
+                                                            "nullable": true
+                                                        },
+                                                        "meilleure_moyenne": {
+                                                            "type": "number",
+                                                            "nullable": true
+                                                        },
+                                                        "plus_faible_moyenne": {
+                                                            "type": "number",
+                                                            "nullable": true
+                                                        }
+                                                    }
+                                                },
+                                                "eleves": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "catechumene_id": {
+                                                                "type": "string"
+                                                            },
+                                                            "matricule": {
+                                                                "type": "string"
+                                                            },
+                                                            "nom_prenoms": {
+                                                                "type": "string"
+                                                            },
+                                                            "nombre_evaluations": {
+                                                                "type": "integer"
+                                                            },
+                                                            "nombre_notes": {
+                                                                "type": "integer"
+                                                            },
+                                                            "moyenne": {
+                                                                "type": "number",
+                                                                "nullable": true
+                                                            },
+                                                            "appreciation": {
+                                                                "type": "string"
+                                                            },
+                                                            "details_notes": {
+                                                                "type": "array"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Accès refusé pour cette classe"
+                    },
+                    "404": {
+                        "description": "Classe introuvable"
+                    }
+                }
+            }
+        },
+        "/evaluations/catechumenes/{catechumene}/synthese": {
+            "get": {
+                "tags": [
+                    "7. Évaluations & Bulletins"
+                ],
+                "summary": "Synthèse des évaluations d'un catéchumène (Bulletin de notes)",
+                "description": "Retourne l'ensemble des évaluations, notes obtenues, barèmes, coefficients, appréciations et la moyenne générale de l'élève pour son bulletin.",
+                "operationId": "getCatechumeneSynthese",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "catechumene",
+                        "in": "path",
+                        "required": true,
+                        "description": "UUID ou ID du catéchumène",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "annee_catechese_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Synthèse complète des notes du catéchumène"
+                    },
+                    "403": {
+                        "description": "Accès refusé"
+                    },
+                    "404": {
+                        "description": "Catéchumène introuvable"
                     }
                 }
             }

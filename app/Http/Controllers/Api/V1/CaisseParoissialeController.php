@@ -8,6 +8,7 @@ use App\Http\Resources\Api\V1\CaisseParoissialeResource;
 use App\Models\AnneeCatechese;
 use App\Models\CaisseParoissiale;
 use App\Models\Paiement;
+use App\Models\Versement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -67,10 +68,12 @@ class CaisseParoissialeController extends Controller
 
         // Calculs des KPIs
         $kpiQuery = CaisseParoissiale::query();
+        $versementQuery = Versement::where('statut', 'valide');
         $paiementQuery = Paiement::where('statut', 'valide');
 
         if ($paroisseId) {
             $kpiQuery->where('paroisse_configuration_id', $paroisseId);
+            $versementQuery->where('paroisse_configuration_id', $paroisseId);
             $paiementQuery->where('paroisse_configuration_id', $paroisseId);
         }
 
@@ -79,6 +82,7 @@ class CaisseParoissialeController extends Controller
             $anneeId = is_numeric($val) ? (int) $val : AnneeCatechese::where('uuid', $val)->value('id');
             if ($anneeId) {
                 $kpiQuery->where('annee_catechese_id', $anneeId);
+                $versementQuery->where('annee_catechese_id', $anneeId);
                 $paiementQuery->where('annee_catechese_id', $anneeId);
             }
         }
@@ -87,7 +91,10 @@ class CaisseParoissialeController extends Controller
         $totalRembourse = (float) (clone $kpiQuery)->where('type_mouvement', 'remboursement')->sum('montant');
         $totalDepense = (float) (clone $kpiQuery)->whereIn('type_mouvement', ['sortie', 'depense'])->sum('montant');
         $totalSorties = (float) (clone $kpiQuery)->whereIn('type_mouvement', ['sortie', 'depense', 'remboursement'])->sum('montant');
-        $soldeCaisse = $totalEncaisse - $totalSorties;
+        $totalVerse = (float) $versementQuery->sum('montant_verse');
+        
+        // Le solde réel en caisse est le montant restant après dépenses, remboursements et versements au Curé
+        $soldeCaisse = max(0, $totalEncaisse - $totalSorties - $totalVerse);
 
         $paiementsValidesCount = $paiementQuery->count();
 
@@ -96,11 +103,14 @@ class CaisseParoissialeController extends Controller
             'kpis' => [
                 'solde_en_caisse'        => $soldeCaisse,
                 'solde_caisse'           => $soldeCaisse,
+                'reste_a_reverser'       => $soldeCaisse,
                 'total_encaisse'         => $totalEncaisse,
                 'total_entrees'          => $totalEncaisse,
                 'total_rembourse'        => $totalRembourse,
                 'total_depense'          => $totalDepense,
                 'total_sorties'          => $totalSorties,
+                'total_verse'            => $totalVerse,
+                'total_deja_verse'       => $totalVerse,
                 'paiements_valides_count'=> $paiementsValidesCount,
             ],
             'data' => CaisseParoissialeResource::collection($mouvements->items()),
