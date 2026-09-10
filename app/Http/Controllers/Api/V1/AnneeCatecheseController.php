@@ -12,13 +12,28 @@ use Illuminate\Support\Facades\DB;
 class AnneeCatecheseController extends Controller
 {
     /**
-     * Liste des années pastorales de la paroisse du tenant connecté.
+     * Liste des annÃ©es pastorales de la paroisse du tenant connectÃ©.
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
-        $query = AnneeCatechese::where('paroisse_configuration_id', $paroisseId);
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta'   => [
+                    'total_elements' => 0,
+                ],
+                'data'   => [],
+            ]);
+        }
+
+        $query = AnneeCatechese::where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -29,7 +44,12 @@ class AnneeCatecheseController extends Controller
             $query->where('statut', strtolower($request->statut));
         }
 
-        $annees = $query->latest('date_debut')->get();
+        $annees = $query
+            ->withCount(['inscriptionsAnnuelles as total_inscrits' => function ($q) {
+                $q->where('statut_inscription', '!=', 'annulee');
+            }])
+            ->latest('date_debut')
+            ->get();
 
         return response()->json([
             'status' => 'success',
@@ -45,8 +65,21 @@ class AnneeCatecheseController extends Controller
      */
     public function current(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
-        $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Aucune paroisse spécifiée ou rattachée au compte actuel.',
+            ], 404);
+        }
+
+        $annee = AnneeCatechese::resolveAnnee($request, (int) $paroisseId);
 
         if (!$annee) {
             return response()->json([
@@ -54,6 +87,10 @@ class AnneeCatecheseController extends Controller
                 'message' => 'Aucune année pastorale configurée pour cette paroisse.',
             ], 404);
         }
+
+        $annee->loadCount(['inscriptionsAnnuelles as total_inscrits' => function ($q) {
+            $q->where('statut_inscription', '!=', 'annulee');
+        }]);
 
         return response()->json([
             'status' => 'success',
@@ -66,7 +103,18 @@ class AnneeCatecheseController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'libelle'    => ['required', 'string', 'max:50'],
@@ -75,7 +123,7 @@ class AnneeCatecheseController extends Controller
             'statut'     => ['nullable', 'string', 'in:preparation,active,cloturee'],
         ]);
 
-        $validated['paroisse_configuration_id'] = $paroisseId;
+        $validated['paroisse_configuration_id'] = (int) $paroisseId;
         $validated['statut'] = $validated['statut'] ?? 'preparation';
 
         $annee = DB::transaction(function () use ($validated, $paroisseId) {
@@ -88,19 +136,27 @@ class AnneeCatecheseController extends Controller
             return AnneeCatechese::create($validated);
         });
 
+        $annee->loadCount(['inscriptionsAnnuelles as total_inscrits' => function ($q) {
+            $q->where('statut_inscription', '!=', 'annulee');
+        }]);
+
         return response()->json([
             'status'  => 'success',
-            'message' => 'Année pastorale créée avec succès.',
+            'message' => 'AnnÃ©e pastorale crÃ©Ã©e avec succÃ¨s.',
             'data'    => new AnneeCatecheseResource($annee),
         ], 201);
     }
 
     /**
-     * Affichage d'une année pastorale.
+     * Affichage d'une annÃ©e pastorale.
      */
     public function show(Request $request, AnneeCatechese $annee): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $annee->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $annee->paroisse_configuration_id);
+
+        $annee->loadCount(['inscriptionsAnnuelles as total_inscrits' => function ($q) {
+            $q->where('statut_inscription', '!=', 'annulee');
+        }]);
 
         return response()->json([
             'status' => 'success',
@@ -113,7 +169,7 @@ class AnneeCatecheseController extends Controller
      */
     public function update(Request $request, AnneeCatechese $annee): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $annee->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $annee->paroisse_configuration_id);
 
         $validated = $request->validate([
             'libelle'    => ['sometimes', 'required', 'string', 'max:50'],
@@ -133,6 +189,10 @@ class AnneeCatecheseController extends Controller
             $annee->update($validated);
         });
 
+        $annee->loadCount(['inscriptionsAnnuelles as total_inscrits' => function ($q) {
+            $q->where('statut_inscription', '!=', 'annulee');
+        }]);
+
         return response()->json([
             'status'  => 'success',
             'message' => 'Année pastorale mise à jour avec succès.',
@@ -145,7 +205,7 @@ class AnneeCatecheseController extends Controller
      */
     public function activate(Request $request, AnneeCatechese $annee): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $annee->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $annee->paroisse_configuration_id);
 
         DB::transaction(function () use ($annee) {
             AnneeCatechese::where('paroisse_configuration_id', $annee->paroisse_configuration_id)
@@ -157,6 +217,10 @@ class AnneeCatecheseController extends Controller
                 'statut' => 'active',
             ]);
         });
+
+        $annee->loadCount(['inscriptionsAnnuelles as total_inscrits' => function ($q) {
+            $q->where('statut_inscription', '!=', 'annulee');
+        }]);
 
         return response()->json([
             'status'  => 'success',
@@ -170,19 +234,19 @@ class AnneeCatecheseController extends Controller
      */
     public function destroy(Request $request, AnneeCatechese $annee): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $annee->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $annee->paroisse_configuration_id);
 
         if ($annee->statut === 'active') {
             return response()->json([
                 'status'  => 'error',
-                'message' => "Impossible de supprimer l'année pastorale actuellement active.",
+                'message' => "Impossible de supprimer l'annÃ©e pastorale actuellement active.",
             ], 422);
         }
 
         if ($annee->classes()->exists()) {
             return response()->json([
                 'status'  => 'error',
-                'message' => "Impossible de supprimer cette année pastorale car des classes y sont rattachées.",
+                'message' => "Impossible de supprimer cette annÃ©e pastorale car des classes y sont rattachÃ©es.",
             ], 422);
         }
 
@@ -190,14 +254,14 @@ class AnneeCatecheseController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Année pastorale supprimée avec succès.',
+            'message' => 'AnnÃ©e pastorale supprimÃ©e avec succÃ¨s.',
         ]);
     }
 
     private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
-            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
+            abort(response()->json(['status' => 'error', 'message' => 'AccÃ¨s refusÃ©.'], 403));
         }
     }
 }

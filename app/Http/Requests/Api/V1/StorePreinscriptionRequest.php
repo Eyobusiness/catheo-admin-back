@@ -22,6 +22,9 @@ class StorePreinscriptionRequest extends FormRequest
             'niveau_souhaite_id'        => ['nullable'],
             'niveau_id'                 => ['nullable'],
             'type_demande'              => ['nullable', 'string', 'in:nouvelle_inscription,reinscription,premiere_inscription'],
+            'matricule'                 => ['nullable', 'string', 'max:50'],
+            'catechumene_id'            => ['nullable', 'string'],
+            'domicile'                  => ['nullable', 'string', 'max:255'],
             
             // Fiche Identité
             'nom'                       => ['required', 'string', 'max:255'],

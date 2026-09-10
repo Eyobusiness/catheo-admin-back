@@ -16,9 +16,21 @@ class NiveauController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
 
-        $query = Niveau::with('section')->where('paroisse_configuration_id', $paroisseId);
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta' => ['total_elements' => 0],
+                'data' => [],
+            ]);
+        }
+
+        $query = Niveau::with('section')->where('paroisse_configuration_id', (int) $paroisseId);
 
         // Recherche textuelle ("Rechercher un niveau...")
         if ($request->filled('search')) {
@@ -31,7 +43,9 @@ class NiveauController extends Controller
 
         // Filtre par section ("Toutes les sections" ou section_id)
         if ($request->filled('section_id') && $request->input('section_id') !== 'all') {
-            $sectionId = Section::where('uuid', $request->input('section_id'))->value('id');
+            $sectionId = Section::where('uuid', $request->input('section_id'))
+                ->where('paroisse_configuration_id', (int) $paroisseId)
+                ->value('id');
             if ($sectionId) {
                 $query->where('section_id', $sectionId);
             }
@@ -58,7 +72,18 @@ class NiveauController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'section_id' => ['required', 'string', 'exists:sections,uuid'],
@@ -68,9 +93,12 @@ class NiveauController extends Controller
             'ordre_affichage' => ['nullable', 'integer'],
         ]);
 
-        $section = Section::where('uuid', $validated['section_id'])->firstOrFail();
+        $section = Section::where('uuid', $validated['section_id'])
+            ->where('paroisse_configuration_id', (int) $paroisseId)
+            ->firstOrFail();
+
         $validated['section_id'] = $section->id;
-        $validated['paroisse_configuration_id'] = $paroisseId;
+        $validated['paroisse_configuration_id'] = (int) $paroisseId;
         $validated['statut'] = $validated['statut'] ?? 'actif';
 
         $niveau = Niveau::create($validated);
@@ -88,7 +116,8 @@ class NiveauController extends Controller
      */
     public function show(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $niveau->paroisse_configuration_id);
 
         $niveau->load('section');
 
@@ -103,7 +132,8 @@ class NiveauController extends Controller
      */
     public function update(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $niveau->paroisse_configuration_id);
 
         $validated = $request->validate([
             'section_id' => ['sometimes', 'required', 'string', 'exists:sections,uuid'],
@@ -114,7 +144,9 @@ class NiveauController extends Controller
         ]);
 
         if (!empty($validated['section_id'])) {
-            $section = Section::where('uuid', $validated['section_id'])->firstOrFail();
+            $section = Section::where('uuid', $validated['section_id'])
+                ->where('paroisse_configuration_id', $niveau->paroisse_configuration_id)
+                ->firstOrFail();
             $validated['section_id'] = $section->id;
         }
 
@@ -133,7 +165,8 @@ class NiveauController extends Controller
      */
     public function toggleStatus(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $niveau->paroisse_configuration_id);
 
         $nouveauStatut = ($niveau->statut === 'actif') ? 'inactif' : 'actif';
         $niveau->update(['statut' => $nouveauStatut]);
@@ -151,7 +184,8 @@ class NiveauController extends Controller
      */
     public function destroy(Request $request, Niveau $niveau): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $niveau->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $niveau->paroisse_configuration_id);
 
         if ($niveau->classes()->count() > 0) {
             return response()->json([
@@ -171,7 +205,7 @@ class NiveauController extends Controller
     private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
-            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
+            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé. Ce niveau appartient à une autre paroisse.'], 403));
         }
     }
 }

@@ -90,7 +90,23 @@ class ProfilController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Profil::withCount('users');
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta' => [
+                    'total_elements' => 0,
+                ],
+                'data' => [],
+            ]);
+        }
+
+        $query = Profil::withCount('users')
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -121,11 +137,17 @@ class ProfilController extends Controller
      */
     public function store(StoreProfilRequest $request): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
         $validated = $request->validated();
         $nom = $validated['nom'] ?? $validated['libelle'] ?? $validated['code'];
         $libelle = $validated['libelle'] ?? $validated['nom'] ?? $validated['code'];
 
         $profil = Profil::create([
+            'paroisse_configuration_id' => $paroisseId ? (int) $paroisseId : null,
             'code'        => $validated['code'],
             'nom'         => $nom,
             'libelle'     => $libelle,
@@ -150,6 +172,9 @@ class ProfilController extends Controller
      */
     public function show(Request $request, Profil $profil): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $profil->paroisse_configuration_id);
+
         $profil->loadCount('users');
 
         return response()->json([
@@ -163,6 +188,9 @@ class ProfilController extends Controller
      */
     public function update(UpdateProfilRequest $request, Profil $profil): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $profil->paroisse_configuration_id);
+
         if ($profil->is_system) {
             return response()->json([
                 'status'  => 'error',
@@ -197,6 +225,9 @@ class ProfilController extends Controller
      */
     public function toggleStatus(Request $request, Profil $profil): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $profil->paroisse_configuration_id);
+
         if ($profil->is_system) {
             return response()->json([
                 'status'  => 'error',
@@ -219,6 +250,9 @@ class ProfilController extends Controller
      */
     public function destroy(Request $request, Profil $profil): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $profil->paroisse_configuration_id);
+
         if ($profil->is_system) {
             return response()->json([
                 'status'  => 'error',
@@ -240,6 +274,13 @@ class ProfilController extends Controller
             'status'  => 'success',
             'message' => 'Profil supprimé avec succès.',
         ]);
+    }
+
+    private function authorizeTenant(?int $userParoisseId, ?int $targetParoisseId): void
+    {
+        if ($userParoisseId && $targetParoisseId && $userParoisseId !== $targetParoisseId) {
+            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé. Ce profil appartient à une autre paroisse.'], 403));
+        }
     }
 
     /**

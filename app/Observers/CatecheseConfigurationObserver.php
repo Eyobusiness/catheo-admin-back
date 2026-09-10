@@ -39,13 +39,16 @@ class CatecheseConfigurationObserver
 
         // Création idempotente du profil ADMIN pour cette paroisse
         $profil = Profil::firstOrCreate(
-            ['code' => $profilCode],
             [
-                'nom'         => 'Administrateur – ' . $catechese->nom_paroisse,
-                'description' => 'Profil administrateur créé automatiquement pour la catéchèse : ' . $catechese->nom_paroisse . '. Accès complet à toutes les fonctionnalités.',
-                'statut'      => 'actif',
-                'permissions' => ['*'],
-                'is_system'   => true,
+                'code'                      => $profilCode,
+                'paroisse_configuration_id' => $catechese->id,
+            ],
+            [
+                'nom'                       => 'Administrateur – ' . $catechese->nom_paroisse,
+                'description'               => 'Profil administrateur créé automatiquement pour la catéchèse : ' . $catechese->nom_paroisse . '. Accès complet à toutes les fonctionnalités.',
+                'statut'                    => 'actif',
+                'permissions'               => ['*'],
+                'is_system'                 => true,
             ]
         );
 

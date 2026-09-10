@@ -16,28 +16,35 @@ class CatecheseConfigurationController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        $currentUser = $request->user();
-        $paroisseId = $currentUser?->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id')
+            ?? $request->input('code_paroisse');
 
         if (!$paroisseId) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Aucune configuration de catéchèse rattachée au compte actuel.',
+                'status'  => 'error',
+                'message' => 'Aucune configuration de catéchèse rattachée au compte actuel ou spécifiée.',
             ], 404);
         }
 
-        $config = CatecheseConfiguration::find($paroisseId);
+        $config = is_numeric($paroisseId)
+            ? CatecheseConfiguration::find((int) $paroisseId)
+            : CatecheseConfiguration::where('uuid', $paroisseId)->orWhere('code_paroisse', $paroisseId)->first();
 
         if (!$config) {
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Configuration de catéchèse introuvable.',
             ], 404);
         }
 
         return response()->json([
             'status' => 'success',
-            'data' => new CatecheseConfigurationResource($config),
+            'data'   => new CatecheseConfigurationResource($config),
         ]);
     }
 
@@ -46,21 +53,34 @@ class CatecheseConfigurationController extends Controller
      */
     public function update(Request $request): JsonResponse
     {
-        $currentUser = $request->user();
-        $paroisseId = $currentUser?->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         if (!$paroisseId) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Aucune configuration de catéchèse rattachée au compte actuel.',
+                'status'  => 'error',
+                'message' => 'Aucune configuration de catéchèse rattachée au compte actuel ou spécifiée.',
             ], 404);
         }
 
-        $config = CatecheseConfiguration::find($paroisseId);
+        if ($currentUser && $currentUser->paroisse_configuration_id && (int) $currentUser->paroisse_configuration_id !== (int) $paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Accès refusé. Vous ne pouvez modifier que la configuration de votre paroisse.',
+            ], 403);
+        }
+
+        $config = is_numeric($paroisseId)
+            ? CatecheseConfiguration::find((int) $paroisseId)
+            : CatecheseConfiguration::where('uuid', $paroisseId)->orWhere('code_paroisse', $paroisseId)->first();
 
         if (!$config) {
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Configuration de catéchèse introuvable.',
             ], 404);
         }

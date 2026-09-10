@@ -16,9 +16,24 @@ class SauvegardeController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
-        $sauvegardes = Sauvegarde::where('paroisse_configuration_id', $paroisseId)
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta' => [
+                    'total_sauvegardes' => 0,
+                ],
+                'data' => [],
+            ]);
+        }
+
+        $sauvegardes = Sauvegarde::where('paroisse_configuration_id', (int) $paroisseId)
             ->latest()
             ->get();
 
@@ -37,7 +52,9 @@ class SauvegardeController extends Controller
     public function store(Request $request): JsonResponse
     {
         $currentUser = $request->user();
-        $paroisseId = $currentUser->paroisse_configuration_id;
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id');
 
         if (!$paroisseId) {
             return response()->json([
@@ -83,7 +100,7 @@ class SauvegardeController extends Controller
      */
     public function download(Request $request, Sauvegarde $sauvegarde)
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $sauvegarde->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $sauvegarde->paroisse_configuration_id);
 
         if (Storage::disk('local')->exists($sauvegarde->chemin_fichier)) {
             return Storage::disk('local')->download($sauvegarde->chemin_fichier, $sauvegarde->nom_fichier);
@@ -104,7 +121,7 @@ class SauvegardeController extends Controller
      */
     public function restaurer(Request $request, Sauvegarde $sauvegarde): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $sauvegarde->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $sauvegarde->paroisse_configuration_id);
 
         return response()->json([
             'status' => 'success',
@@ -118,7 +135,7 @@ class SauvegardeController extends Controller
      */
     public function destroy(Request $request, Sauvegarde $sauvegarde): JsonResponse
     {
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $sauvegarde->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $sauvegarde->paroisse_configuration_id);
 
         if (Storage::disk('local')->exists($sauvegarde->chemin_fichier)) {
             Storage::disk('local')->delete($sauvegarde->chemin_fichier);

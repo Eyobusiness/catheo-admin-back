@@ -20,13 +20,27 @@ class UserController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
 
-        $query = User::with(['paroisse', 'profil']);
-
-        if ($paroisseId) {
-            $query->where('paroisse_configuration_id', $paroisseId);
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta'   => [
+                    'current_page'   => 1,
+                    'per_page'       => 15,
+                    'total_elements' => 0,
+                    'total_pages'    => 1,
+                    'has_next'       => false,
+                ],
+                'data'   => [],
+            ]);
         }
+
+        $query = User::with(['paroisse', 'profil'])
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -75,7 +89,18 @@ class UserController extends Controller
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id;
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
+
         $validated = $request->validated();
 
         $profilInput = $validated['profil_id'];
@@ -90,6 +115,13 @@ class UserController extends Controller
             ], 422);
         }
 
+        if ($profil->paroisse_configuration_id && (int) $profil->paroisse_configuration_id !== (int) $paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Le profil sélectionné n\'appartient pas à votre catéchèse.',
+            ], 422);
+        }
+
         $nom = $validated['nom'] ?? $validated['name'] ?? 'Utilisateur';
         $prenoms = $validated['prenoms'] ?? '';
         $name = $validated['name'] ?? trim("{$nom} {$prenoms}");
@@ -100,7 +132,7 @@ class UserController extends Controller
         $statut = strtolower($validated['statut'] ?? (isset($validated['is_active']) && !$validated['is_active'] ? 'inactif' : 'actif'));
 
         $user = User::create([
-            'paroisse_configuration_id' => $paroisseId,
+            'paroisse_configuration_id' => (int) $paroisseId,
             'profil_id'                 => $profil->id,
             'user_type'                 => 'admin',
             'name'                      => $name,
@@ -122,7 +154,8 @@ class UserController extends Controller
      */
     public function show(Request $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($currentUser?->paroisse_configuration_id, $user->paroisse_configuration_id);
 
         return response()->json([
             'status' => 'success',
@@ -135,7 +168,8 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($currentUser?->paroisse_configuration_id, $user->paroisse_configuration_id);
         $validated = $request->validated();
 
         if (!empty($validated['profil_id'])) {
@@ -190,13 +224,14 @@ class UserController extends Controller
      */
     public function updateStatus(UpdateUserStatusRequest $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($currentUser?->paroisse_configuration_id, $user->paroisse_configuration_id);
 
-        if ($request->user() && $user->id === $request->user()->id) {
+        if ($user->profil && $user->profil->code === 'SUPER_ADMIN') {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Vous ne pouvez pas désactiver votre propre compte connecté.',
-            ], 422);
+                'message' => 'Le statut du compte Super Administrateur ne peut pas être modifié.',
+            ], 403);
         }
 
         $validated = $request->validated();
@@ -223,7 +258,8 @@ class UserController extends Controller
      */
     public function destroy(Request $request, User $user): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $user->paroisse_configuration_id);
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($currentUser?->paroisse_configuration_id, $user->paroisse_configuration_id);
 
         if ($request->user() && $user->id === $request->user()->id) {
             return response()->json([

@@ -19,10 +19,21 @@ class AffectationAnimateurController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta'   => ['total_elements' => 0],
+                'data'   => [],
+            ]);
+        }
 
         $query = AffectationAnimateur::with(['animateur', 'anneeCatechese', 'classe'])
-            ->where('paroisse_configuration_id', $paroisseId);
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('annee_catechese_id')) {
             $anneeId = AnneeCatechese::where('uuid', $request->annee_catechese_id)
@@ -80,7 +91,17 @@ class AffectationAnimateurController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $data = $request->all();
 
@@ -120,10 +141,19 @@ class AffectationAnimateurController extends Controller
             ->firstOrFail();
 
         if (empty($validated['annee_catechese_id'])) {
-            $annee = AnneeCatechese::getAnneeCourante($paroisseId) ?? AnneeCatechese::first();
+            $annee = AnneeCatechese::getAnneeCourante($paroisseId);
+            if (!$annee) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Aucune année pastorale active trouvée pour cette paroisse. Veuillez préciser l\'année pastorale.',
+                ], 422);
+            }
         } else {
-            $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])
-                ->orWhere('id', $validated['annee_catechese_id'])
+            $annee = AnneeCatechese::where('paroisse_configuration_id', $paroisseId)
+                ->where(function ($q) use ($validated) {
+                    $q->where('uuid', $validated['annee_catechese_id'])
+                      ->orWhere('id', $validated['annee_catechese_id']);
+                })
                 ->firstOrFail();
         }
 

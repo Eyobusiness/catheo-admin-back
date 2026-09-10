@@ -24,15 +24,22 @@ class InscriptionAnnuelleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::value('id');
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $query = InscriptionAnnuelle::with(['catechumene', 'anneeCatechese', 'section', 'niveau.section', 'classe', 'ceb', 'mouvement']);
 
         if ($paroisseId) {
-            $query->where(function ($q) use ($paroisseId) {
-                $q->where('paroisse_configuration_id', $paroisseId)
-                  ->orWhereNull('paroisse_configuration_id');
-            });
+            $query->where('paroisse_configuration_id', $paroisseId);
+        } elseif ($user && !$user->paroisse_configuration_id && ($user->user_type === 'super_admin' || $user->profil?->code === 'SUPER_ADMIN')) {
+            // Super Administrateur sans filtre : vue globale
+        } else {
+            // Pas de paroisse identifiée : aucun enregistrement
+            $query->whereRaw('1 = 0');
         }
 
         if ($request->filled('annee_catechese_id') && !in_array(strtolower($request->annee_catechese_id), ['all', 'tous', 'undefined', 'null'])) {
@@ -190,6 +197,20 @@ class InscriptionAnnuelleController extends Controller
         $validated['section_id'] = !empty($validated['section_id'])
             ? (is_numeric($validated['section_id']) ? (int)$validated['section_id'] : Section::where('uuid', $validated['section_id'])->value('id'))
             : $niveau->section_id;
+                // Vérification si le catéchumène possède déjà une inscription pour cette année pastorale
+        $dejaInscrit = InscriptionAnnuelle::where('catechumene_id', $catechumene->id)
+            ->where('annee_catechese_id', $annee->id)
+            ->where('statut_inscription', '!=', 'annulee')
+            ->exists();
+
+        if ($dejaInscrit) {
+            return response()->json([
+                'status'  => 'error',
+                'code'    => 'ALREADY_ENROLLED',
+                'message' => "Ce catéchumène possède déjà une préinscription ou réinscription avec ses informations pour cette année pastorale, veuillez vous rendre au bureau de la catéchèse.",
+            ], 422);
+        }
+
         $validated['date_inscription'] = $validated['date_inscription'] ?? now()->toDateString();
         $validated['statut_inscription'] = 'valide';
 

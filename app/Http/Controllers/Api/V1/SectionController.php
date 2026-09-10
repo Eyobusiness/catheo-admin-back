@@ -15,10 +15,22 @@ class SectionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta' => ['total_elements' => 0],
+                'data' => [],
+            ]);
+        }
 
         $query = Section::with('niveaux')
-            ->where('paroisse_configuration_id', $paroisseId);
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         // Recherche par nom ou code ("Rechercher une section...")
         if ($request->filled('search')) {
@@ -51,7 +63,18 @@ class SectionController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
@@ -61,7 +84,7 @@ class SectionController extends Controller
             'ordre_affichage' => ['nullable', 'integer'],
         ]);
 
-        $validated['paroisse_configuration_id'] = $paroisseId;
+        $validated['paroisse_configuration_id'] = (int) $paroisseId;
         $validated['statut'] = $validated['statut'] ?? 'actif';
 
         $section = Section::create($validated);
@@ -78,7 +101,8 @@ class SectionController extends Controller
      */
     public function show(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $section->paroisse_configuration_id);
 
         $section->load('niveaux');
 
@@ -93,7 +117,8 @@ class SectionController extends Controller
      */
     public function update(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $section->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom' => ['sometimes', 'required', 'string', 'max:255'],
@@ -117,7 +142,8 @@ class SectionController extends Controller
      */
     public function toggleStatus(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $section->paroisse_configuration_id);
 
         $nouveauStatut = ($section->statut === 'actif') ? 'inactif' : 'actif';
         $section->update(['statut' => $nouveauStatut]);
@@ -134,7 +160,8 @@ class SectionController extends Controller
      */
     public function destroy(Request $request, Section $section): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $section->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $section->paroisse_configuration_id);
 
         if ($section->niveaux()->count() > 0) {
             return response()->json([
@@ -154,7 +181,7 @@ class SectionController extends Controller
     private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
-            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
+            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé. Cette section appartient à une autre paroisse.'], 403));
         }
     }
 }

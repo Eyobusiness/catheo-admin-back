@@ -18,8 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->api(append: [
             \App\Http\Middleware\SecurityHeadersMiddleware::class,
+            \App\Http\Middleware\ApplyWorkingAnnee::class,
         ]);
-        // Alias pour le contrôle des permissions CRUD : middleware('permission:module.action')
+        // Alias pour le contrÃ´le des permissions CRUD : middleware('permission:module.action')
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
@@ -29,7 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*') || $request->wantsJson()) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Non authentifié. Veuillez vous connecter via /api/v1/auth/login pour obtenir un jeton Sanctum Bearer.',
+                    'message' => 'Non authentifiÃ©. Veuillez vous connecter via /api/v1/auth/login pour obtenir un jeton Sanctum Bearer.',
                 ], 401);
             }
         });
@@ -38,7 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*') || $request->wantsJson()) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Ressource non trouvée.',
+                    'message' => 'Ressource non trouvÃ©e.',
                 ], 404);
             }
         });

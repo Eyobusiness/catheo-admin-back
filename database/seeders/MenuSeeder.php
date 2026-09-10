@@ -66,10 +66,9 @@ class MenuSeeder extends Seeder
                 'reference'  => 'main_evaluations',
                 'is_active'  => true,
                 'sousMenus'  => [
-                    ['ordre' => 1, 'libelle' => 'Évaluations',    'icon' => 'bi bi-clipboard2-check',        'path' => '/evaluations',    'code' => '400', 'permission' => null, 'reference' => 'evaluations',    'is_active' => true],
-                    ['ordre' => 2, 'libelle' => 'Notes',          'icon' => 'bi bi-pencil-square',           'path' => '/notes',          'code' => '400', 'permission' => null, 'reference' => 'notes',          'is_active' => true],
-                    ['ordre' => 3, 'libelle' => 'Bilans annuels', 'icon' => 'bi bi-file-earmark-text',       'path' => '/bilans-annuels', 'code' => '400', 'permission' => null, 'reference' => 'bilans_annuels', 'is_active' => true],
-                    ['ordre' => 4, 'libelle' => 'Bulletins',      'icon' => 'bi bi-file-earmark-bar-graph',  'path' => '/bulletins',      'code' => '400', 'permission' => null, 'reference' => 'bulletins',      'is_active' => true],
+                    ['ordre' => 1, 'libelle' => 'Notes & Évaluations',          'icon' => 'bi bi-pencil-square',           'path' => '/notes',          'code' => '400', 'permission' => null, 'reference' => 'notes',          'is_active' => true],
+                    ['ordre' => 2, 'libelle' => 'Bilans annuels', 'icon' => 'bi bi-file-earmark-text',       'path' => '/bilans-annuels', 'code' => '400', 'permission' => null, 'reference' => 'bilans_annuels', 'is_active' => true],
+                    ['ordre' => 3, 'libelle' => 'Bulletins',      'icon' => 'bi bi-file-earmark-bar-graph',  'path' => '/bulletins',      'code' => '400', 'permission' => null, 'reference' => 'bulletins',      'is_active' => true],
                 ],
             ],
             [

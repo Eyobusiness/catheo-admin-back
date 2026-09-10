@@ -16,9 +16,20 @@ class ModuleTrimestrielController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
 
-        $query = ModuleTrimestriel::with('anneeCatechese')->where('paroisse_configuration_id', $paroisseId);
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta'   => ['total_elements' => 0],
+                'data'   => [],
+            ]);
+        }
+
+        $query = ModuleTrimestriel::with('anneeCatechese')->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('annee_catechese_id')) {
             $anneeId = AnneeCatechese::where('uuid', $request->annee_catechese_id)
@@ -50,7 +61,17 @@ class ModuleTrimestrielController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $data = $request->all();
 

@@ -20,6 +20,7 @@ class Profil extends Model
 
     protected $fillable = [
         'uuid',
+        'paroisse_configuration_id',
         'nom',
         'code',
         'description',
@@ -27,6 +28,11 @@ class Profil extends Model
         'permissions',
         'is_system',
     ];
+
+    public function paroisse(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
+    }
 
     protected $casts = [
         'permissions' => 'array',

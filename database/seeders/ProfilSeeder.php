@@ -241,7 +241,7 @@ class ProfilSeeder extends Seeder
 
         if ($rules === 'resp_catechese') {
             // Resp Catéchèse : Dashboard, Organisation, Présences, Évaluations, Catéchumènes (read), Impressions
-            if (in_array($ref, ['dashboard', 'main_presences', 'seances', 'main_evaluations', 'evaluations', 'notes', 'bilans_annuels', 'bulletins'])) {
+            if (in_array($ref, ['dashboard', 'main_presences', 'seances', 'main_evaluations', 'notes', 'bilans_annuels', 'bulletins'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true, 'can_restore' => true, 'can_force_delete' => false];
             }
             if (str_starts_with($ref, 'main_organisation') || in_array($ref, ['annees_pastorales', 'sections', 'niveaux', 'classes', 'animateurs', 'affectations_animateurs', 'cebs', 'mouvements', 'calendrier', 'modules_trimestriels'])) {
@@ -261,7 +261,7 @@ class ProfilSeeder extends Seeder
             if (in_array($ref, ['main_presences', 'seances', 'main_evaluations', 'notes'])) {
                 return ['can_read' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
-            if (in_array($ref, ['evaluations', 'bilans_annuels', 'bulletins', 'main_organisation', 'classes', 'calendrier', 'modules_trimestriels'])) {
+            if (in_array($ref, ['notes', 'bilans_annuels', 'bulletins', 'main_organisation', 'classes', 'calendrier', 'modules_trimestriels'])) {
                 return ['can_read' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false, 'can_restore' => false, 'can_force_delete' => false];
             }
             return $none;

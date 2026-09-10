@@ -734,10 +734,7 @@ class ImpressionController extends Controller
     private function getCatechumenesQuery(int $paroisseId, array $validated)
     {
         $query = Catechumene::with(['parrainsMarraines', 'ceb'])
-            ->where(function ($q) use ($paroisseId) {
-                $q->where('paroisse_configuration_id', $paroisseId)
-                  ->orWhereNull('paroisse_configuration_id');
-            });
+            ->where('paroisse_configuration_id', $paroisseId);
 
         if (!empty($validated['catechumene_id'])) {
             $catVal = $validated['catechumene_id'];

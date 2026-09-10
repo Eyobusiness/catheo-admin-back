@@ -17,9 +17,20 @@ class AnimateurController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
 
-        $query = Animateur::where('paroisse_configuration_id', $paroisseId);
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [],
+                'meta'   => ['total' => 0],
+            ]);
+        }
+
+        $query = Animateur::where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('statut')) {
             $statut = strtolower($request->statut);
@@ -57,7 +68,17 @@ class AnimateurController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'nom'        => ['required', 'string', 'max:255'],
@@ -92,8 +113,9 @@ class AnimateurController extends Controller
      */
     public function show(Request $request, mixed $animateur): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveAnimateur($animateur);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         return response()->json([
             'status' => 'success',
@@ -106,8 +128,9 @@ class AnimateurController extends Controller
      */
     public function update(Request $request, mixed $animateur): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveAnimateur($animateur);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom'        => ['sometimes', 'required', 'string', 'max:255'],
@@ -147,8 +170,9 @@ class AnimateurController extends Controller
      */
     public function updateStatus(Request $request, mixed $animateur): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveAnimateur($animateur);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         if ($request->filled('statut')) {
             $nouveauStatut = strtolower($request->statut);
@@ -172,8 +196,9 @@ class AnimateurController extends Controller
      */
     public function destroy(Request $request, mixed $animateur): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveAnimateur($animateur);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $model->delete();
 

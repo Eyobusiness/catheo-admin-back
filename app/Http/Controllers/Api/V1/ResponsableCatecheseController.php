@@ -15,9 +15,21 @@ class ResponsableCatecheseController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::value('id');
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
-        $responsables = ResponsableCatechese::where('paroisse_configuration_id', $paroisseId)
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [],
+            ]);
+        }
+
+        $responsables = ResponsableCatechese::where('paroisse_configuration_id', (int) $paroisseId)
             ->latest()
             ->get();
 
@@ -32,7 +44,18 @@ class ResponsableCatecheseController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::value('id');
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'nom_prenoms' => ['required', 'string', 'max:255'],
@@ -41,7 +64,7 @@ class ResponsableCatecheseController extends Controller
             'statut'      => ['nullable', 'in:actif,inactif'],
         ]);
 
-        $validated['paroisse_configuration_id'] = $paroisseId;
+        $validated['paroisse_configuration_id'] = (int) $paroisseId;
         $validated['statut'] = $validated['statut'] ?? 'actif';
 
         $responsable = ResponsableCatechese::create($validated);
@@ -59,7 +82,7 @@ class ResponsableCatecheseController extends Controller
     public function show(Request $request, mixed $responsable): JsonResponse
     {
         $model = $this->resolveResponsable($responsable);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         return response()->json([
             'status' => 'success',
@@ -73,7 +96,7 @@ class ResponsableCatecheseController extends Controller
     public function update(Request $request, mixed $responsable): JsonResponse
     {
         $model = $this->resolveResponsable($responsable);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom_prenoms' => ['sometimes', 'required', 'string', 'max:255'],
@@ -97,7 +120,7 @@ class ResponsableCatecheseController extends Controller
     public function destroy(Request $request, mixed $responsable): JsonResponse
     {
         $model = $this->resolveResponsable($responsable);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $model->delete();
 

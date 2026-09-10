@@ -16,17 +16,22 @@ class ApparenceConfigurationController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         if (!$paroisseId) {
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Aucune configuration de catéchèse trouvée.',
             ], 404);
         }
 
         $apparence = ApparenceConfiguration::firstOrCreate(
-            ['paroisse_configuration_id' => $paroisseId],
+            ['paroisse_configuration_id' => (int) $paroisseId],
             [
                 'couleur_principale' => '#4F46E5',
                 'couleur_secondaire' => '#D97706',
@@ -45,13 +50,25 @@ class ApparenceConfigurationController extends Controller
      */
     public function update(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         if (!$paroisseId) {
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Aucune configuration de catéchèse trouvée.',
             ], 404);
+        }
+
+        if ($currentUser && $currentUser->paroisse_configuration_id && (int) $currentUser->paroisse_configuration_id !== (int) $paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Accès refusé. Vous ne pouvez modifier que l\'apparence de votre paroisse.',
+            ], 403);
         }
 
         $validated = $request->validate([
@@ -63,7 +80,7 @@ class ApparenceConfigurationController extends Controller
         ]);
 
         $apparence = ApparenceConfiguration::firstOrCreate(
-            ['paroisse_configuration_id' => $paroisseId],
+            ['paroisse_configuration_id' => (int) $paroisseId],
             [
                 'couleur_principale' => '#4F46E5',
                 'couleur_secondaire' => '#D97706',
@@ -85,17 +102,29 @@ class ApparenceConfigurationController extends Controller
      */
     public function reset(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::value('id');
+        $currentUser = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $currentUser?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         if (!$paroisseId) {
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Aucune configuration de catéchèse trouvée.',
             ], 404);
         }
 
+        if ($currentUser && $currentUser->paroisse_configuration_id && (int) $currentUser->paroisse_configuration_id !== (int) $paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Accès refusé.',
+            ], 403);
+        }
+
         $apparence = ApparenceConfiguration::firstOrCreate(
-            ['paroisse_configuration_id' => $paroisseId]
+            ['paroisse_configuration_id' => (int) $paroisseId]
         );
 
         $apparence->update([

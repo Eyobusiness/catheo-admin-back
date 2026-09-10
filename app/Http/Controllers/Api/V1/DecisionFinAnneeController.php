@@ -24,20 +24,33 @@ class DecisionFinAnneeController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [],
+            ]);
+        }
 
         $classeParam = $request->input('classe_id') ?? $request->input('classe');
         $anneeParam = $request->input('annee_catechese_id') ?? $request->input('anneePastorale') ?? $request->input('annee_pastorale');
 
         $anneeId = null;
         if ($anneeParam) {
-            $anneeId = AnneeCatechese::where('uuid', $anneeParam)
-                ->orWhere('libelle', $anneeParam)
-                ->orWhere('id', $anneeParam)
+            $anneeId = AnneeCatechese::where('paroisse_configuration_id', (int) $paroisseId)
+                ->where(function ($q) use ($anneeParam) {
+                    $q->where('uuid', $anneeParam)
+                      ->orWhere('libelle', $anneeParam)
+                      ->orWhere('id', $anneeParam);
+                })
                 ->value('id');
         }
         if (!$anneeId) {
-            $anneeId = AnneeCatechese::getAnneeCourante($paroisseId)?->id ?? AnneeCatechese::first()?->id;
+            $anneeId = AnneeCatechese::getAnneeCourante((int) $paroisseId)?->id;
         }
 
         $classeId = null;
@@ -125,7 +138,17 @@ class DecisionFinAnneeController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         // Cas 1 : Validation globale de la classe
         if ($request->boolean('valide') || $request->has('annee_pastorale')) {

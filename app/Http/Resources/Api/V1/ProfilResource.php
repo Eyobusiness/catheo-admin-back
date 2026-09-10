@@ -12,10 +12,11 @@ class ProfilResource extends JsonResource
         $permissions = $this->permissions ?? [];
 
         return [
-            'id'                => $this->uuid,
-            'uuid'              => $this->uuid,
-            'name'              => $this->nom,
-            'nom'               => $this->nom,
+            'id'                       => $this->uuid,
+            'uuid'                     => $this->uuid,
+            'paroisse_configuration_id' => $this->paroisse_configuration_id,
+            'name'                     => $this->nom,
+            'nom'                      => $this->nom,
             'code'              => $this->code,
             'description'       => $this->description,
             'statut'            => ucfirst($this->statut ?? 'actif'), // Actif, Inactif

@@ -15,10 +15,22 @@ class MouvementController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta'   => ['total_elements' => 0],
+                'data'   => [],
+            ]);
+        }
 
         $query = Mouvement::withCount('inscriptionsAnnuelles')
-            ->where('paroisse_configuration_id', $paroisseId);
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -50,7 +62,18 @@ class MouvementController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'nom'         => ['required', 'string', 'max:150'],
@@ -60,7 +83,7 @@ class MouvementController extends Controller
             'statut'      => ['nullable', 'string', 'in:Active,Inactive,active,inactive'],
         ]);
 
-        $validated['paroisse_configuration_id'] = $paroisseId;
+        $validated['paroisse_configuration_id'] = (int) $paroisseId;
         $validated['statut'] = ucfirst(strtolower($validated['statut'] ?? 'Active'));
 
         $mouvement = Mouvement::create($validated);
@@ -77,7 +100,8 @@ class MouvementController extends Controller
      */
     public function show(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
 
         $mouvement->loadCount('inscriptionsAnnuelles');
 
@@ -92,7 +116,8 @@ class MouvementController extends Controller
      */
     public function update(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
 
         $validated = $request->validate([
             'nom'         => ['sometimes', 'required', 'string', 'max:150'],
@@ -121,7 +146,8 @@ class MouvementController extends Controller
      */
     public function toggleStatus(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
 
         $nouveauStatut = (strtolower($mouvement->statut) === 'active') ? 'Inactive' : 'Active';
         $mouvement->update(['statut' => $nouveauStatut]);
@@ -139,7 +165,8 @@ class MouvementController extends Controller
      */
     public function destroy(Request $request, Mouvement $mouvement): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $mouvement->paroisse_configuration_id);
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $mouvement->paroisse_configuration_id);
 
         if ($mouvement->inscriptionsAnnuelles()->count() > 0) {
             return response()->json([
@@ -159,7 +186,7 @@ class MouvementController extends Controller
     private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
-            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
+            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé. Ce mouvement appartient à une autre paroisse.'], 403));
         }
     }
 }

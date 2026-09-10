@@ -49,8 +49,18 @@ class EvaluationController extends Controller
      */
     public function store(StoreEvaluationRequest $request): JsonResponse
     {
-        $user = $request->user();
-        $paroisseId = $user->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
+
         $validated = $request->validated();
 
         // Résolution de l'année pastorale
@@ -284,9 +294,9 @@ class EvaluationController extends Controller
     public function simuler(Request $request, mixed $evaluation): JsonResponse
     {
         $model = $this->resolveEvaluation($evaluation);
-        $user = $request->user();
-        $this->authorizeTenant($user->paroisse_configuration_id, $model->paroisse_configuration_id);
-        $paroisseId = $user->paroisse_configuration_id ?? $model->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $paroisseId = $user?->paroisse_configuration_id ?? $model->paroisse_configuration_id;
 
         $inscriptions = InscriptionAnnuelle::where('paroisse_configuration_id', $paroisseId)
             ->when($model->classe_id, fn($q) => $q->where('classe_id', $model->classe_id))

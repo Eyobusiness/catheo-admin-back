@@ -20,11 +20,22 @@ class CampagnePreinscriptionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [],
+                'meta'   => ['total' => 0],
+            ]);
+        }
 
         $query = CampagnePreinscription::with('anneeCatechese')
             ->withCount('preinscriptions')
-            ->where('paroisse_configuration_id', $paroisseId);
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('statut')) {
             $query->where('statut', $request->statut);
@@ -112,19 +123,33 @@ class CampagnePreinscriptionController extends Controller
      */
     public function store(StoreCampagnePreinscriptionRequest $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
+
         $validated = $request->validated();
 
         $anneeParam = $validated['annee_catechese_id'] ?? null;
         $anneeId = null;
         if ($anneeParam) {
-            $anneeId = AnneeCatechese::where('uuid', $anneeParam)
-                ->orWhere('id', $anneeParam)
-                ->orWhere('libelle', $anneeParam)
+            $anneeId = AnneeCatechese::where('paroisse_configuration_id', (int) $paroisseId)
+                ->where(function ($q) use ($anneeParam) {
+                    $q->where('uuid', $anneeParam)
+                      ->orWhere('id', $anneeParam)
+                      ->orWhere('libelle', $anneeParam);
+                })
                 ->value('id');
         }
         if (!$anneeId) {
-            $anneeId = AnneeCatechese::getAnneeCourante($paroisseId)?->id ?? AnneeCatechese::first()?->id;
+            $anneeId = AnneeCatechese::getAnneeCourante((int) $paroisseId)?->id;
         }
 
         $validated['annee_catechese_id'] = $anneeId;
@@ -148,8 +173,9 @@ class CampagnePreinscriptionController extends Controller
      */
     public function show(Request $request, mixed $campagne): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveCampagne($campagne);
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $model->load('anneeCatechese')->loadCount('preinscriptions');
 
@@ -164,8 +190,9 @@ class CampagnePreinscriptionController extends Controller
      */
     public function update(UpdateCampagnePreinscriptionRequest $request, mixed $campagne): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveCampagne($campagne);
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
         $validated = $request->validated();
 
         if (isset($validated['nom'])) {
@@ -197,8 +224,9 @@ class CampagnePreinscriptionController extends Controller
      */
     public function updateStatus(Request $request, mixed $campagne): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveCampagne($campagne);
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $statut = $request->input('statut') ?? $request->input('status');
         if ($request->has('est_ouverte')) {
@@ -224,8 +252,9 @@ class CampagnePreinscriptionController extends Controller
      */
     public function destroy(Request $request, mixed $campagne): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveCampagne($campagne);
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $model->delete();
 

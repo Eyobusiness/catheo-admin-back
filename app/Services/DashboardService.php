@@ -36,10 +36,15 @@ class DashboardService
             ->where('statut', 'actif')
             ->count();
 
-        $classesCount = $anneeId ? Classe::where('paroisse_configuration_id', $paroisseId)
-            ->where('annee_catechese_id', $anneeId)
-            ->where('statut', 'actif')
-            ->count() : 0;
+        $classesCount = Classe::where('paroisse_configuration_id', $paroisseId)
+            ->when($anneeId, function ($q) use ($anneeId) {
+                $q->where(function ($sub) use ($anneeId) {
+                    $sub->where('annee_catechese_id', $anneeId)
+                        ->orWhereNull('annee_catechese_id');
+                });
+            })
+            ->whereIn('statut', ['actif', 'active'])
+            ->count();
 
         $animateursCount = Animateur::where('paroisse_configuration_id', $paroisseId)
             ->where('statut', 'actif')
@@ -101,11 +106,14 @@ class DashboardService
 
         // 4. Répartition par Classe de Catéchèse
         $classesQuery = Classe::where('paroisse_configuration_id', $paroisseId)
-            ->where('statut', 'actif')
+            ->whereIn('statut', ['actif', 'active'])
             ->with(['niveau.section']);
 
         if ($anneeId) {
-            $classesQuery->where('annee_catechese_id', $anneeId);
+            $classesQuery->where(function ($q) use ($anneeId) {
+                $q->where('annee_catechese_id', $anneeId)
+                  ->orWhereNull('annee_catechese_id');
+            });
         }
 
         $classes = $classesQuery->get();
@@ -120,14 +128,18 @@ class DashboardService
         $repartitionClasses = [];
         foreach ($classes as $cl) {
             $effectif = (int) ($inscriptionsByClasse[$cl->id] ?? 0);
+            $capacite = $cl->capacite_max ? (int) $cl->capacite_max : 30;
+            $pourcentage = $capacite > 0 ? min(100, (int) round(($effectif / $capacite) * 100)) : 0;
             $repartitionClasses[] = [
-                'classe_id'   => $cl->uuid,
-                'classe_nom'  => $cl->nom,
-                'niveau_id'   => $cl->niveau?->uuid,
-                'niveau_nom'  => $cl->niveau?->nom ?? 'Non défini',
-                'section_id'  => $cl->niveau?->section?->uuid,
-                'section_nom' => $cl->niveau?->section?->nom ?? 'Non définie',
-                'effectif'    => $effectif,
+                'classe_id'    => $cl->uuid,
+                'classe_nom'   => $cl->nom,
+                'niveau_id'    => $cl->niveau?->uuid,
+                'niveau_nom'   => $cl->niveau?->nom ?? 'Non d�fini',
+                'section_id'   => $cl->niveau?->section?->uuid,
+                'section_nom'  => $cl->niveau?->section?->nom ?? 'Non d�finie',
+                'effectif'     => $effectif,
+                'capacite_max' => $capacite,
+                'pourcentage'  => $pourcentage,
             ];
         }
 

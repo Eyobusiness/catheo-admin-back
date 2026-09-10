@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
 class PreinscriptionController extends Controller
 {
     /**
-     * Résout une instance de Preinscription à partir d'un UUID ou d'un ID numérique.
+     * RÃ©sout une instance de Preinscription Ã  partir d'un UUID ou d'un ID numÃ©rique.
      */
     private function resolvePreinscription(mixed $preinscription): Preinscription
     {
@@ -43,17 +43,38 @@ class PreinscriptionController extends Controller
     }
 
     /**
-     * Liste paginée des préinscriptions de la paroisse avec filtres.
+     * Liste paginÃ©e des prÃ©inscriptions de la paroisse avec filtres.
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id 
-            ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $query = Preinscription::with(['campagne', 'anneeCatechese', 'sectionSouhaite', 'niveauSouhaite']);
 
         if ($paroisseId) {
             $query->where('paroisse_configuration_id', $paroisseId);
+        } elseif ($user && !$user->paroisse_configuration_id && ($user->user_type === 'super_admin' || $user->profil?->code === 'SUPER_ADMIN')) {
+            // Super admin : accès global
+        } else {
+            $query->whereRaw('1 = 0');
+        }
+
+        if ($request->filled('annee_catechese_id') && !in_array(strtolower($request->annee_catechese_id), ['all', 'tous', 'undefined', 'null'])) {
+            $anneeParam = $request->annee_catechese_id;
+            $anneeId = is_numeric($anneeParam) ? (int)$anneeParam : AnneeCatechese::where('uuid', $anneeParam)->value('id');
+            if ($anneeId) {
+                $query->where(function ($q) use ($anneeId) {
+                    $q->where('annee_catechese_id', $anneeId)
+                      ->orWhereHas('campagne', function ($cq) use ($anneeId) {
+                          $cq->where('annee_catechese_id', $anneeId);
+                      });
+                });
+            }
         }
 
         if ($request->filled('statut')) {
@@ -131,13 +152,164 @@ class PreinscriptionController extends Controller
     }
 
     /**
-     * Soumettre ou enregistrer une préinscription.
+     * Vérifie si une personne possède déjà une inscription ou préinscription
+     * pour l'année de la campagne concernée.
+     */
+    private function verifyDuplicate(array $data, CampagnePreinscription $campagne): ?array
+    {
+        $anneeId = $campagne->annee_catechese_id ?? AnneeCatechese::where('est_active', true)->value('id');
+
+        $nom = !empty($data['nom']) ? mb_strtolower(trim($data['nom'])) : null;
+        $prenoms = !empty($data['prenoms']) ? mb_strtolower(trim($data['prenoms'])) : null;
+        $dateNais = !empty($data['date_naissance']) ? date('Y-m-d', strtotime($data['date_naissance'])) : null;
+        $cleanPhone = !empty($data['telephone']) ? preg_replace('/[^0-9]/', '', $data['telephone']) : null;
+        $catParam = $data['catechumene_id'] ?? null;
+        $matricule = !empty($data['matricule']) ? trim($data['matricule']) : null;
+
+        $targetCatId = null;
+        if ($catParam) {
+            $targetCatId = is_numeric($catParam) ? (int)$catParam : Catechumene::where('uuid', $catParam)->value('id');
+        } elseif ($matricule) {
+            $targetCatId = Catechumene::where('matricule', $matricule)->value('id');
+        }
+
+        // 1. Vérification dans les Inscriptions Annuelles de l'année concernée
+        $inscriptionQuery = InscriptionAnnuelle::where('annee_catechese_id', $anneeId)
+            ->where('statut_inscription', '!=', 'annulee');
+
+        if ($targetCatId) {
+            $existingIns = (clone $inscriptionQuery)->where('catechumene_id', $targetCatId)->first();
+        } else {
+            $existingIns = null;
+            if ($nom && $prenoms) {
+                $existingIns = (clone $inscriptionQuery)->whereHas('catechumene', function ($cq) use ($nom, $prenoms, $dateNais, $cleanPhone) {
+                    $cq->whereRaw('LOWER(TRIM(nom)) = ?', [$nom])
+                       ->whereRaw('LOWER(TRIM(prenoms)) = ?', [$prenoms]);
+
+                    if ($dateNais && $cleanPhone) {
+                        $cq->where(function ($sub) use ($dateNais, $cleanPhone) {
+                            $sub->whereDate('date_naissance', $dateNais)
+                                ->orWhereRaw("REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', '') LIKE ?", ["%{$cleanPhone}%"]);
+                        });
+                    } elseif ($dateNais) {
+                        $cq->whereDate('date_naissance', $dateNais);
+                    } elseif ($cleanPhone) {
+                        $cq->whereRaw("REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', '') LIKE ?", ["%{$cleanPhone}%"]);
+                    }
+                })->first();
+            }
+        }
+
+        if ($existingIns) {
+            return [
+                'exists'  => true,
+                'type'    => 'inscription',
+                'message' => "Vous avez déjà une préinscription ou réinscription avec ces informations pour l'année de la campagne concernée, veuillez vous rendre au bureau de la catéchèse.",
+            ];
+        }
+
+        // 2. Vérification dans les Préinscriptions (en attente ou validées)
+        $preinscriptionQuery = Preinscription::where(function ($q) use ($campagne, $anneeId) {
+                $q->where('campagne_preinscription_id', $campagne->id)
+                  ->orWhere('annee_catechese_id', $anneeId);
+            })
+            ->where('statut', '!=', 'rejetee');
+
+        $existingPre = null;
+        if ($targetCatId) {
+            $cat = Catechumene::find($targetCatId);
+            if ($cat) {
+                $cNom = mb_strtolower(trim($cat->nom));
+                $cPrenoms = mb_strtolower(trim($cat->prenoms));
+                $existingPre = (clone $preinscriptionQuery)->where(function ($q) use ($cNom, $cPrenoms, $cat) {
+                    $q->where(function ($sub) use ($cNom, $cPrenoms) {
+                        $sub->whereRaw('LOWER(TRIM(nom)) = ?', [$cNom])
+                            ->whereRaw('LOWER(TRIM(prenoms)) = ?', [$cPrenoms]);
+                    });
+                    if ($cat->telephone) {
+                        $cleanCatTel = preg_replace('/[^0-9]/', '', $cat->telephone);
+                        if ($cleanCatTel) {
+                            $q->orWhereRaw("REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', '') LIKE ?", ["%{$cleanCatTel}%"]);
+                        }
+                    }
+                })->first();
+            }
+        }
+
+        if (!$existingPre && $nom && $prenoms) {
+            $existingPre = (clone $preinscriptionQuery)->where(function ($q) use ($nom, $prenoms, $dateNais, $cleanPhone) {
+                $q->whereRaw('LOWER(TRIM(nom)) = ?', [$nom])
+                  ->whereRaw('LOWER(TRIM(prenoms)) = ?', [$prenoms]);
+
+                if ($dateNais && $cleanPhone) {
+                    $q->where(function ($sub) use ($dateNais, $cleanPhone) {
+                        $sub->whereDate('date_naissance', $dateNais)
+                            ->orWhereRaw("REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', '') LIKE ?", ["%{$cleanPhone}%"]);
+                    });
+                } elseif ($dateNais) {
+                    $q->whereDate('date_naissance', $dateNais);
+                } elseif ($cleanPhone) {
+                    $q->whereRaw("REPLACE(REPLACE(REPLACE(telephone, ' ', ''), '-', ''), '+', '') LIKE ?", ["%{$cleanPhone}%"]);
+                }
+            })->first();
+        }
+
+        if ($existingPre) {
+            return [
+                'exists'  => true,
+                'type'    => 'preinscription',
+                'message' => "Vous avez déjà une préinscription ou réinscription avec ces informations pour l'année de la campagne concernée, veuillez vous rendre au bureau de la catéchèse.",
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Endpoint public ou authentifié pour vérifier si un dossier existe déjà.
+     */
+    public function checkDuplicate(Request $request): JsonResponse
+    {
+        $campagneParam = $request->input('campagne_id') ?? $request->input('campagne_preinscription_id');
+        if ($campagneParam) {
+            $campagne = is_numeric($campagneParam)
+                ? CampagnePreinscription::find($campagneParam)
+                : CampagnePreinscription::where('uuid', $campagneParam)->first();
+        } else {
+            $campagne = CampagnePreinscription::where('statut', 'ouverte')->latest()->first()
+                ?? CampagnePreinscription::latest()->first();
+        }
+
+        if (!$campagne) {
+            return response()->json(['exists' => false]);
+        }
+
+        $duplicate = $this->verifyDuplicate($request->all(), $campagne);
+
+        if ($duplicate) {
+            return response()->json([
+                'status'  => 'duplicate',
+                'exists'  => true,
+                'type'    => $duplicate['type'],
+                'message' => $duplicate['message'],
+                'code'    => 'ALREADY_EXISTS_FOR_YEAR',
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'exists' => false,
+        ]);
+    }
+
+    /**
+     * Soumettre ou enregistrer une prÃ©inscription.
      */
     public function store(StorePreinscriptionRequest $request): JsonResponse
     {
         $validated = $request->validated();
 
-        // 1. Résolution Campagne
+        // 1. RÃ©solution Campagne
         $campagneParam = $validated['campagne_id'] ?? $validated['campagne_preinscription_id'] ?? null;
         if ($campagneParam) {
             $campagne = is_numeric($campagneParam)
@@ -151,18 +323,27 @@ class PreinscriptionController extends Controller
         if ($campagne->statut !== 'ouverte') {
             return response()->json([
                 'status'  => 'error',
-                'message' => "La campagne de préinscription pour l'année pastorale en cours est actuellement clôturée. Veuillez vous rendre au secrétariat de la paroisse.",
+                'message' => "La campagne de prÃ©inscription pour l'annÃ©e pastorale en cours est actuellement clÃ´turÃ©e. Veuillez vous rendre au secrÃ©tariat de la paroisse.",
             ], 422);
         }
 
         $paroisseId = $request->user()?->paroisse_configuration_id 
-            ?? $campagne->paroisse_configuration_id 
-            ?? CatecheseConfiguration::first()?->id;
+            ?? $campagne->paroisse_configuration_id;
 
         $validated['paroisse_configuration_id'] = $paroisseId;
         $validated['campagne_preinscription_id'] = $campagne->id;
         $validated['annee_catechese_id'] = $campagne->annee_catechese_id ?? AnneeCatechese::where('est_active', true)->value('id');
         $validated['code_dossier'] = 'PRE-' . strtoupper(Str::random(6));
+
+        // Vérification d'unicité (Préinscription ou Réinscription pour l'année concernée)
+        $duplicate = $this->verifyDuplicate($validated, $campagne);
+        if ($duplicate) {
+            return response()->json([
+                'status'  => 'error',
+                'code'    => 'ALREADY_EXISTS_FOR_YEAR',
+                'message' => $duplicate['message'],
+            ], 422);
+        }
 
         // 2. Normalisation type_demande
         $typeDemande = $validated['type_demande'] ?? 'nouvelle_inscription';
@@ -190,13 +371,13 @@ class PreinscriptionController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Préinscription enregistrée avec succès. Code dossier : ' . $preinscription->code_dossier,
+            'message' => 'PrÃ©inscription enregistrÃ©e avec succÃ¨s. Code dossier : ' . $preinscription->code_dossier,
             'data'    => new PreinscriptionResource($preinscription),
         ], 201);
     }
 
     /**
-     * Afficher les détails d'une préinscription.
+     * Afficher les dÃ©tails d'une prÃ©inscription.
      */
     public function show(Request $request, mixed $preinscription): JsonResponse
     {
@@ -210,7 +391,7 @@ class PreinscriptionController extends Controller
     }
 
     /**
-     * Mettre à jour une préinscription.
+     * Mettre Ã  jour une prÃ©inscription.
      */
     public function update(UpdatePreinscriptionRequest $request, mixed $preinscription): JsonResponse
     {
@@ -251,13 +432,13 @@ class PreinscriptionController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Préinscription mise à jour avec succès.',
+            'message' => 'PrÃ©inscription mise Ã  jour avec succÃ¨s.',
             'data'    => new PreinscriptionResource($item),
         ]);
     }
 
     /**
-     * Mettre à jour le statut d'une préinscription (en_attente, validee, rejetee).
+     * Mettre Ã  jour le statut d'une prÃ©inscription (en_attente, validee, rejetee).
      */
     public function updateStatus(Request $request, mixed $preinscription): JsonResponse
     {
@@ -276,13 +457,13 @@ class PreinscriptionController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Statut de la préinscription mis à jour.',
+            'message' => 'Statut de la prÃ©inscription mis Ã  jour.',
             'data'    => new PreinscriptionResource($item),
         ]);
     }
 
     /**
-     * Valider la préinscription par l'administration ➔ Crée ou rattache le Catéchumène et crée son Inscription Annuelle.
+     * Valider la prÃ©inscription par l'administration âž” CrÃ©e ou rattache le CatÃ©chumÃ¨ne et crÃ©e son Inscription Annuelle.
      */
     public function valider(ValiderPreinscriptionRequest $request, mixed $preinscription): JsonResponse
     {
@@ -291,7 +472,7 @@ class PreinscriptionController extends Controller
         if ($item->statut === 'validee') {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Cette préinscription a déjà été validée.',
+                'message' => 'Cette prÃ©inscription a dÃ©jÃ  Ã©tÃ© validÃ©e.',
             ], 422);
         }
 
@@ -313,11 +494,11 @@ class PreinscriptionController extends Controller
             $annee = $item->anneeCatechese ?? AnneeCatechese::where('est_active', true)->first();
             $prefixAnnee = explode('-', $annee->libelle ?? date('Y'))[0] ?? date('Y');
 
-            // Vérification du type de demande : réinscription vs nouvelle inscription
+            // VÃ©rification du type de demande : rÃ©inscription vs nouvelle inscription
             $catechumene = null;
 
             if ($item->type_demande === 'reinscription') {
-                // Recherche d'un catéchumène existant
+                // Recherche d'un catÃ©chumÃ¨ne existant
                 if (!empty($validated['catechumene_id'])) {
                     $catParam = $validated['catechumene_id'];
                     $catechumene = is_numeric($catParam) 
@@ -339,7 +520,7 @@ class PreinscriptionController extends Controller
                 }
             }
 
-            // Si nouvelle inscription ou catéchumène non trouvé, on le crée
+            // Si nouvelle inscription ou catÃ©chumÃ¨ne non trouvÃ©, on le crÃ©e
             if (!$catechumene) {
                 $sectionForMatricule = $niveau->section ?? $niveau->section_id;
                 $yearForMatricule = $annee?->libelle ?? $annee?->date_debut;
@@ -376,7 +557,7 @@ class PreinscriptionController extends Controller
                 ]);
             } else {
 
-                // Mise à jour éventuelle des infos de contact
+                // Mise Ã  jour Ã©ventuelle des infos de contact
                 $catechumene->update([
                     'adresse'          => $item->adresse ?? $catechumene->adresse,
                     'telephone'        => $item->telephone ?? $catechumene->telephone,
@@ -385,7 +566,7 @@ class PreinscriptionController extends Controller
                 ]);
             }
 
-            // 2. Création ou mise à jour de l'Inscription Annuelle
+            // 2. CrÃ©ation ou mise Ã  jour de l'Inscription Annuelle
             $anneeId = $annee?->id ?? $item->annee_catechese_id;
             $codeInscription = 'INS-' . $prefixAnnee . '-' . strtoupper(Str::random(5));
 
@@ -407,7 +588,7 @@ class PreinscriptionController extends Controller
                 ]
             );
 
-            // 3. Déclenchement automatique de l'opération de paiement en attente dans la finance UNIQUEMENT si un tarif réel existe
+            // 3. DÃ©clenchement automatique de l'opÃ©ration de paiement en attente dans la finance UNIQUEMENT si un tarif rÃ©el existe
             if (!$inscription->frais_inscription_payes) {
                 $explicitTarifId = $validated['tarif_id'] ?? $request->input('tarif_id');
                 $tarif = Tarif::resolveForInscription(
@@ -441,7 +622,7 @@ class PreinscriptionController extends Controller
                 }
             }
 
-            // 4. Création du Parrain/Marraine si renseigné
+            // 4. CrÃ©ation du Parrain/Marraine si renseignÃ©
             if (!empty($item->nom_parrain)) {
                 $typeParrain = (strtoupper($item->sexe_parrain ?? '') === 'F') ? 'marraine' : 'parrain';
                 ParrainMarraine::firstOrCreate(
@@ -458,10 +639,10 @@ class PreinscriptionController extends Controller
                 );
             }
 
-            // 5. Marquer la préinscription comme validée
+            // 5. Marquer la prÃ©inscription comme validÃ©e
             $item->update([
                 'statut'           => 'validee',
-                'notes_validation' => $validated['notes_validation'] ?? 'Validée par le secrétariat.',
+                'notes_validation' => $validated['notes_validation'] ?? 'ValidÃ©e par le secrÃ©tariat.',
             ]);
 
             return [
@@ -472,7 +653,7 @@ class PreinscriptionController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Préinscription validée avec succès. Dossier catéchumène et inscription annuelle prêts.',
+            'message' => 'PrÃ©inscription validÃ©e avec succÃ¨s. Dossier catÃ©chumÃ¨ne et inscription annuelle prÃªts.',
             'data'    => [
                 'matricule'        => $resultat['catechumene']->matricule,
                 'code_catechumene' => $resultat['catechumene']->matricule,
@@ -483,7 +664,7 @@ class PreinscriptionController extends Controller
     }
 
     /**
-     * Rejeter une préinscription.
+     * Rejeter une prÃ©inscription.
      */
     public function rejeter(Request $request, mixed $preinscription): JsonResponse
     {
@@ -495,7 +676,7 @@ class PreinscriptionController extends Controller
             'notes_validation' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $motif = $validated['motif_rejet'] ?? $validated['motif'] ?? $validated['notes_validation'] ?? 'Préinscription rejetée par l\'administration.';
+        $motif = $validated['motif_rejet'] ?? $validated['motif'] ?? $validated['notes_validation'] ?? 'PrÃ©inscription rejetÃ©e par l\'administration.';
 
         $item->update([
             'statut'           => 'rejetee',
@@ -506,13 +687,13 @@ class PreinscriptionController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Préinscription rejetée.',
+            'message' => 'PrÃ©inscription rejetÃ©e.',
             'data'    => new PreinscriptionResource($item),
         ]);
     }
 
     /**
-     * Supprimer une préinscription.
+     * Supprimer une prÃ©inscription.
      */
     public function destroy(Request $request, mixed $preinscription): JsonResponse
     {
@@ -521,7 +702,7 @@ class PreinscriptionController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Préinscription supprimée avec succès.',
+            'message' => 'PrÃ©inscription supprimÃ©e avec succÃ¨s.',
         ]);
     }
 }

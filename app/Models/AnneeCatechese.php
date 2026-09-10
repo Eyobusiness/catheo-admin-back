@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
-
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class AnneeCatechese extends Model
 {
@@ -46,12 +46,22 @@ class AnneeCatechese extends Model
         return $this->hasMany(ModuleTrimestriel::class, 'annee_catechese_id');
     }
 
+    public function inscriptionsAnnuelles(): HasMany
+    {
+        return $this->hasMany(InscriptionAnnuelle::class, 'annee_catechese_id');
+    }
+
+    public function catechumenes(): BelongsToMany
+    {
+        return $this->belongsToMany(Catechumene::class, 'inscriptions_annuelles', 'annee_catechese_id', 'catechumene_id');
+    }
+
     /**
-     * Récupère l'année pastorale en cours / par défaut pour une paroisse donnée.
-     * Priorité :
-     * 1. Année avec statut = 'active'
-     * 2. Année couvrant la date du jour
-     * 3. Année la plus récente
+     * RÃ©cupÃ¨re l'annÃ©e pastorale en cours / par dÃ©faut pour une paroisse donnÃ©e.
+     * PrioritÃ© :
+     * 1. AnnÃ©e avec statut = 'active'
+     * 2. AnnÃ©e couvrant la date du jour
+     * 3. AnnÃ©e la plus rÃ©cente
      */
     public static function getAnneeCourante(?int $paroisseId): ?self
     {
@@ -83,8 +93,8 @@ class AnneeCatechese extends Model
     }
 
     /**
-     * Résout dynamiquement l'année catéchétique pour la requête (via en-tête ou paramètre),
-     * avec repli par défaut sur l'année en cours.
+     * RÃ©sout dynamiquement l'annÃ©e catÃ©chÃ©tique pour la requÃªte (via en-tÃªte ou paramÃ¨tre),
+     * avec repli par dÃ©faut sur l'annÃ©e en cours.
      */
     public static function resolveAnnee(\Illuminate\Http\Request $request, ?int $paroisseId = null): ?self
     {

@@ -22,10 +22,21 @@ class SeanceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status' => 'success',
+                'meta'   => ['total_elements' => 0],
+                'data'   => [],
+            ]);
+        }
 
         $query = Seance::with(['anneeCatechese', 'classe', 'presences.catechumene'])
-            ->where('paroisse_configuration_id', $paroisseId);
+            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('classe_id')) {
             $classeId = Classe::where('uuid', $request->classe_id)
@@ -83,7 +94,17 @@ class SeanceController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->header('X-Paroisse-Id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
 
         $data = $request->all();
 
@@ -117,7 +138,7 @@ class SeanceController extends Controller
                 ->firstOrFail();
             $anneeId = $annee->id;
         } else {
-            $annee = AnneeCatechese::getAnneeCourante($paroisseId) ?? AnneeCatechese::first();
+            $annee = AnneeCatechese::getAnneeCourante($paroisseId);
             $anneeId = $annee?->id;
         }
 
@@ -319,9 +340,10 @@ class SeanceController extends Controller
      */
     public function presences(Request $request, mixed $seance): JsonResponse
     {
+        $user = $request->user() ?? auth('sanctum')->user();
         $model = $this->resolveSeance($seance);
-        $paroisseId = $request->user()->paroisse_configuration_id ?? $model->paroisse_configuration_id ?? CatecheseConfiguration::first()?->id;
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $paroisseId = $user?->paroisse_configuration_id ?? $model->paroisse_configuration_id;
+        $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $validated = $request->validate([
             'presences'                   => ['required', 'array', 'min:1'],

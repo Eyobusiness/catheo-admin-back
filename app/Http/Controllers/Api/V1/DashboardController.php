@@ -67,7 +67,7 @@ class DashboardController extends Controller
      */
     public function adminDashboard(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? 1;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? 3;
         $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
 
         $dashboardData = $this->dashboardService->getAdminDashboardData($paroisseId, $annee);
@@ -463,7 +463,7 @@ class DashboardController extends Controller
      */
     public function finances(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? 1;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? 3;
         $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
 
         $financesData = $this->dashboardService->getFinancesDashboardData($paroisseId, $annee);
@@ -479,7 +479,7 @@ class DashboardController extends Controller
      */
     public function bilanAnnuel(Request $request, ?string $anneeCatecheseId = null): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? 1;
+        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? 3;
 
         // Résolution de l'année demandée via paramètre d'URL, query param ou en-tête
         $anneeParam = $anneeCatecheseId ?? $request->query('annee_catechese_id') ?? $request->header('X-Annee-Id');

@@ -27,7 +27,12 @@ class CatechumeneController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? \App\Models\CatecheseConfiguration::value('id');
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $query = Catechumene::with([
             'inscriptionsAnnuelles' => function ($q) {
@@ -42,10 +47,12 @@ class CatechumeneController extends Controller
         ]);
 
         if ($paroisseId) {
-            $query->where(function ($q) use ($paroisseId) {
-                $q->where('paroisse_configuration_id', $paroisseId)
-                  ->orWhereNull('paroisse_configuration_id');
-            });
+            $query->where('paroisse_configuration_id', $paroisseId);
+        } elseif ($user && !$user->paroisse_configuration_id && ($user->user_type === 'super_admin' || $user->profil?->code === 'SUPER_ADMIN')) {
+            // Super Administrateur sans filtre de paroisse spécifique : accès global
+        } else {
+            // Pas de paroisse identifiée : aucun résultat pour éviter toute fuite inter-paroisses
+            $query->whereRaw('1 = 0');
         }
 
         if ($request->filled('statut') && !in_array(strtolower($request->statut), ['all', 'tous', 'undefined', 'null'])) {
@@ -57,7 +64,8 @@ class CatechumeneController extends Controller
             $anneeId = is_numeric($val) ? (int) $val : AnneeCatechese::where('uuid', $val)->value('id');
             if ($anneeId) {
                 $query->whereHas('inscriptionsAnnuelles', function ($q) use ($anneeId) {
-                    $q->where('annee_catechese_id', $anneeId);
+                    $q->where('annee_catechese_id', $anneeId)
+                      ->where('statut_inscription', '!=', 'annulee');
                 });
             }
         }
@@ -124,8 +132,11 @@ class CatechumeneController extends Controller
             $concat2 = $isSqlite ? "(prenoms || ' ' || nom)" : "CONCAT(prenoms, ' ', nom)";
 
             $query->where(function ($q) use ($search, $concat1, $concat2) {
-                $q->where('nom', 'like', "%{$search}%")
+                $q->where('nom', 'like', "{$search}%")
+                  ->orWhere('nom', 'like', "%{$search}%")
+                  ->orWhere('prenoms', 'like', "{$search}%")
                   ->orWhere('prenoms', 'like', "%{$search}%")
+                  ->orWhere('matricule', 'like', "{$search}%")
                   ->orWhere('matricule', 'like', "%{$search}%")
                   ->orWhere('uuid', $search)
                   ->orWhere('telephone', 'like', "%{$search}%")
@@ -149,6 +160,14 @@ class CatechumeneController extends Controller
                     });
                 }
             });
+
+            // Prioritiser les resultats qui commencent par la saisie de l'utilisateur
+            $query->orderByRaw("CASE 
+                WHEN nom LIKE ? THEN 1 
+                WHEN prenoms LIKE ? THEN 2 
+                WHEN matricule LIKE ? THEN 3 
+                ELSE 4 
+            END", ["{$search}%", "{$search}%", "{$search}%"]);
         }
 
         if ($request->boolean('all') || $request->get('per_page') === 'all') {
@@ -179,22 +198,35 @@ class CatechumeneController extends Controller
      */
     public function showByMatricule(Request $request, string $code): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id;
+        $user = $request->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
         $trimmedCode = strtolower(trim($code));
 
-        $catechumene = Catechumene::with([
+        $query = Catechumene::with([
             'ceb',
             'inscriptionsAnnuelles.anneeCatechese',
             'inscriptionsAnnuelles.section',
             'inscriptionsAnnuelles.niveau',
             'inscriptionsAnnuelles.classe',
             'parrainsMarraines',
-        ])
-        ->where('paroisse_configuration_id', $paroisseId)
-        ->where(function ($q) use ($trimmedCode) {
+        ]);
+
+        if ($paroisseId) {
+            $query->where('paroisse_configuration_id', $paroisseId);
+        } elseif (!$user || ($user->user_type !== 'super_admin' && $user->profil?->code !== 'SUPER_ADMIN')) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Aucun catéchumène trouvé avec ce matricule.',
+            ], 404);
+        }
+
+        $catechumene = $query->where(function ($q) use ($trimmedCode) {
             $q->whereRaw('LOWER(matricule) = ?', [$trimmedCode]);
-        })
-        ->first();
+        })->first();
 
         if (!$catechumene) {
             return response()->json([
@@ -214,8 +246,6 @@ class CatechumeneController extends Controller
      */
     public function ficheImpression(Request $request, mixed $catechumene): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? CatecheseConfiguration::value('id');
-
         $cat = is_numeric($catechumene)
             ? Catechumene::find((int) $catechumene)
             : Catechumene::where('uuid', $catechumene)->orWhere('matricule', $catechumene)->first();
@@ -227,11 +257,11 @@ class CatechumeneController extends Controller
             ], 404);
         }
 
-        $this->authorizeTenant($paroisseId, $cat->paroisse_configuration_id);
+        $userParoisseId = $request->user()?->paroisse_configuration_id;
+        $this->authorizeTenant($userParoisseId, $cat->paroisse_configuration_id);
 
         $paroisse = CatecheseConfiguration::find($cat->paroisse_configuration_id)
-            ?? CatecheseConfiguration::find($paroisseId)
-            ?? CatecheseConfiguration::firstOrFail();
+            ?? ($userParoisseId ? CatecheseConfiguration::find($userParoisseId) : null);
 
         $cat->loadMissing([
             'ceb',
@@ -339,7 +369,17 @@ class CatechumeneController extends Controller
      */
     public function store(StoreCatechumeneRequest $request): JsonResponse
     {
-        $paroisseId = $request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? CatecheseConfiguration::value('id');
+        $paroisseId = $request->user()?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id') 
+            ?? $request->input('paroisse_id');
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'L\'identifiant de la paroisse est obligatoire.',
+            ], 422);
+        }
+
         $validated = $request->validated();
 
         if (!empty($validated['ceb_id'])) {
@@ -347,9 +387,9 @@ class CatechumeneController extends Controller
             $validated['ceb_id'] = $ceb->id;
         }
 
-        $this->handlePhotoUpload($validated, $paroisseId);
+        $this->handlePhotoUpload($validated, (int) $paroisseId);
 
-        $validated['paroisse_configuration_id'] = $paroisseId;
+        $validated['paroisse_configuration_id'] = (int) $paroisseId;
 
         // Résolution de la section et de l'année si transmises
         $section = null;
@@ -371,7 +411,7 @@ class CatechumeneController extends Controller
 
         // Génération du matricule officiel unique (ex: SM26-J8HDX)
         $validated['matricule'] = app(\App\Services\MatriculeGeneratorService::class)->generate(
-            $paroisseId,
+            (int) $paroisseId,
             $section,
             $yearOrDate
         );
@@ -393,7 +433,7 @@ class CatechumeneController extends Controller
      */
     public function show(Request $request, Catechumene $catechumene): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $catechumene->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $catechumene->paroisse_configuration_id);
 
         $catechumene->load([
             'ceb',
@@ -415,7 +455,7 @@ class CatechumeneController extends Controller
      */
     public function update(UpdateCatechumeneRequest $request, Catechumene $catechumene): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $catechumene->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $catechumene->paroisse_configuration_id);
         $validated = $request->validated();
 
         if (array_key_exists('ceb_id', $validated)) {
@@ -488,7 +528,7 @@ class CatechumeneController extends Controller
      */
     public function destroy(Request $request, Catechumene $catechumene): JsonResponse
     {
-        $this->authorizeTenant($request->user()?->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id, $catechumene->paroisse_configuration_id);
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $catechumene->paroisse_configuration_id);
 
         $catechumene->delete();
 

@@ -9,7 +9,18 @@ class CatechumeneResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $latestInscription = $this->inscriptionsAnnuelles?->first();
+        $workingAnnee = $request->attributes->get('working_annee');
+        $workingAnneeId = $workingAnnee?->id;
+        
+        $latestInscription = null;
+        if ($workingAnneeId && $this->relationLoaded('inscriptionsAnnuelles')) {
+            $latestInscription = $this->inscriptionsAnnuelles->firstWhere('annee_catechese_id', $workingAnneeId);
+        }
+        if (!$latestInscription) {
+            $latestInscription = $this->inscriptionsAnnuelles?->first();
+        }
+
+        $phone = $this->telephone ?: ($this->telephone_pere ?: ($this->telephone_mere ?: $this->telephone_tuteur));
 
         return [
             'id'                          => $this->uuid,
@@ -30,7 +41,7 @@ class CatechumeneResource extends JsonResource
             'profession'                  => $this->profession,
             'classe_scolaire'             => $this->classe_scolaire,
             'situation_matrimoniale'      => $this->situation_matrimoniale,
-            'telephone'                   => $this->telephone,
+            'telephone'                   => $phone,
             'photo_path'                  => $this->photo_path,
             'photo_url'                   => $this->photo_path,
 
