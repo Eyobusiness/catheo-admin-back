@@ -22,6 +22,7 @@ class Animateur extends Authenticatable
 
     protected $fillable = [
         'uuid',
+        'numero',
         'paroisse_configuration_id',
         'nom',
         'prenoms',
@@ -57,9 +58,42 @@ class Animateur extends Authenticatable
         return $this->hasMany(AffectationAnimateur::class, 'animateur_id');
     }
 
+    /**
+     * Récupère l'affectation active de l'animateur pour une année pastorale donnée (ou l'année en cours).
+     */
+    public function affectationActive(?int $anneeId = null): ?AffectationAnimateur
+    {
+        if (!$anneeId) {
+            $anneeCourante = AnneeCatechese::getAnneeCourante($this->paroisse_configuration_id);
+            $anneeId = $anneeCourante?->id;
+        }
+
+        if (!$anneeId) {
+            return null;
+        }
+
+        return $this->affectations()
+            ->where('annee_catechese_id', $anneeId)
+            ->with(['classe.niveau.section', 'anneeCatechese'])
+            ->first();
+    }
+
+    /**
+     * Récupère la classe active affectée à l'animateur pour l'année pastorale active.
+     */
+    public function classeActive(?int $anneeId = null): ?Classe
+    {
+        return $this->affectationActive($anneeId)?->classe;
+    }
+
     public function getNomCompletAttribute(): string
     {
         return trim("{$this->prenoms} {$this->nom}");
+    }
+
+    public function getNumeroAttribute(): ?string
+    {
+        return $this->attributes['numero'] ?? $this->attributes['telephone'] ?? null;
     }
 
     /**

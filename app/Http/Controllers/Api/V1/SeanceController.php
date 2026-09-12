@@ -38,6 +38,17 @@ class SeanceController extends Controller
         $query = Seance::with(['anneeCatechese', 'classe', 'presences.catechumene'])
             ->where('paroisse_configuration_id', (int) $paroisseId);
 
+        // Si l'utilisateur connecté est un Animateur, restreindre strictement à ses classes affectées
+        if ($user instanceof \App\Models\Animateur) {
+            $assignedClassIds = DB::table('affectations_animateurs')
+                ->where('animateur_id', $user->id)
+                ->whereNull('deleted_at')
+                ->pluck('classe_id')
+                ->toArray();
+
+            $query->whereIn('classe_id', $assignedClassIds);
+        }
+
         if ($request->filled('classe_id')) {
             $classeId = Classe::where('uuid', $request->classe_id)
                 ->orWhere('id', $request->classe_id)
@@ -121,6 +132,8 @@ class SeanceController extends Controller
 
         $request->merge($data);
 
+        $this->checkPeriodOrBilanLock($paroisseId, $model->date_seance?->toDateString(), $model->classe_id);
+
         $validated = $request->validate([
             'annee_catechese_id' => ['nullable', 'string'],
             'classe_id'          => ['required', 'string'],
@@ -150,6 +163,8 @@ class SeanceController extends Controller
         if ($statut === 'planifiée') $statut = 'planifiee';
         if ($statut === 'effectuée') $statut = 'effectuee';
         if ($statut === 'annulée') $statut = 'annulee';
+
+        $this->checkPeriodOrBilanLock($paroisseId, $validated['date_seance'] ?? null, $classe->id ?? null);
 
         $seance = Seance::create([
             'paroisse_configuration_id' => $paroisseId,
@@ -209,6 +224,8 @@ class SeanceController extends Controller
         }
 
         $request->merge($data);
+
+        $this->checkPeriodOrBilanLock($paroisseId, $model->date_seance?->toDateString(), $model->classe_id);
 
         $validated = $request->validate([
             'annee_catechese_id' => ['sometimes', 'nullable', 'string'],
@@ -345,6 +362,8 @@ class SeanceController extends Controller
         $paroisseId = $user?->paroisse_configuration_id ?? $model->paroisse_configuration_id;
         $this->authorizeTenant($user?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
+        $this->checkPeriodOrBilanLock($paroisseId, $model->date_seance?->toDateString(), $model->classe_id);
+
         $validated = $request->validate([
             'presences'                   => ['required', 'array', 'min:1'],
             'presences.*.catechumene_id'  => ['required', 'string'],
@@ -414,6 +433,43 @@ class SeanceController extends Controller
             abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
         }
     }
+
+    /**
+     * Vérifie si le trimestre ou le bilan de la classe est clôturé / validé.
+     */
+    private function checkPeriodOrBilanLock(?int $paroisseId, ?string $date, ?int $classeId): void
+    {
+        if (!$paroisseId) return;
+
+        // 1. Date comprise dans un trimestre terminé
+        if ($date) {
+            $dateStr = substr($date, 0, 10);
+            $closedModule = \App\Models\ModuleTrimestriel::where('paroisse_configuration_id', $paroisseId)
+                ->whereIn('statut', ['termine', 'cloture', 'clos'])
+                ->whereDate('date_debut', '<=', $dateStr)
+                ->whereDate('date_fin', '>=', $dateStr)
+                ->exists();
+            if ($closedModule) {
+                abort(response()->json([
+                    'status'  => 'error',
+                    'message' => 'Aucune modification n\'est à effectuer car le bilan est déjà validé.',
+                ], 403));
+            }
+        }
+
+        // 2. Bilan annuel / décisions déjà validées pour la classe
+        if ($classeId) {
+            $hasBilan = DB::table('decisions_fin_annee')
+                ->join('inscriptions_annuelles', 'decisions_fin_annee.inscription_annuelle_id', '=', 'inscriptions_annuelles.id')
+                ->where('inscriptions_annuelles.classe_id', $classeId)
+                ->whereNull('decisions_fin_annee.deleted_at')
+                ->exists();
+            if ($hasBilan) {
+                abort(response()->json([
+                    'status'  => 'error',
+                    'message' => 'Aucune modification n\'est à effectuer car le bilan est déjà validé.',
+                ], 403));
+            }
+        }
+    }
 }
-
-

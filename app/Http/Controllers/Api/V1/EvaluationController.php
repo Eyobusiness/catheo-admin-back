@@ -100,6 +100,7 @@ class EvaluationController extends Controller
             $moduleId = $module?->id;
         }
 
+        $this->checkPeriodOrBilanLock($paroisseId, $moduleId, $validated['date_evaluation'] ?? $validated['date'] ?? null, $classeId);
         $dto = CreateEvaluationDTO::fromArray($validated, $paroisseId, $anneeId, $classeId, $moduleId);
         $evaluation = $this->evaluationService->createEvaluation($user, $dto);
 
@@ -164,6 +165,7 @@ class EvaluationController extends Controller
             $moduleId = $module?->id;
         }
 
+        $this->checkPeriodOrBilanLock($paroisseId, $moduleId ?? $model->module_trimestriel_id, $validated['date_evaluation'] ?? $validated['date'] ?? $model->date_evaluation?->toDateString(), $classeId ?? $model->classe_id);
         $dto = UpdateEvaluationDTO::fromArray($validated, $anneeId, $classeId, $moduleId);
         $updatedModel = $this->evaluationService->updateEvaluation($user, $model, $dto);
 
@@ -197,6 +199,7 @@ class EvaluationController extends Controller
     public function destroy(Request $request, mixed $evaluation): JsonResponse
     {
         $model = $this->resolveEvaluation($evaluation);
+        $this->checkPeriodOrBilanLock($model->paroisse_configuration_id, $model->module_trimestriel_id, $model->date_evaluation?->toDateString(), $model->classe_id);
         $this->evaluationService->deleteEvaluation($request->user(), $model);
 
         return response()->json([
@@ -244,6 +247,7 @@ class EvaluationController extends Controller
         $model = $this->resolveEvaluation($evaluation);
         $dto = SaveNotesBatchDTO::fromArray($request->validated());
 
+        $this->checkPeriodOrBilanLock($model->paroisse_configuration_id, $model->module_trimestriel_id, $model->date_evaluation?->toDateString(), $model->classe_id);
         $updated = $this->evaluationService->saveBatchNotes($request->user(), $model, $dto);
 
         return response()->json([
@@ -356,6 +360,61 @@ class EvaluationController extends Controller
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
             abort(response()->json(['status' => 'error', 'message' => 'Accès refusé pour cette paroisse.'], 403));
+        }
+    }
+
+    /**
+     * Vérifie si le trimestre ou le bilan de la classe est clôturé / validé.
+     */
+    private function checkPeriodOrBilanLock(?int $paroisseId, ?int $moduleId, ?string $date, ?int $classeId): void
+    {
+        if (!$paroisseId) return;
+
+        // 1. Module trimestriel terminé ou clôturé
+        if ($moduleId) {
+            $module = ModuleTrimestriel::where('paroisse_configuration_id', $paroisseId)
+                ->where('id', $moduleId)
+                ->first();
+            if ($module) {
+                $st = strtolower(str_replace(' ', '_', $module->statut ?? ''));
+                if (in_array($st, ['termine', 'cloture', 'clos'])) {
+                    abort(response()->json([
+                        'status'  => 'error',
+                        'message' => 'Aucune modification n\'est à effectuer car le bilan est déjà validé.',
+                    ], 403));
+                }
+            }
+        }
+
+        // 2. Date comprise dans un trimestre terminé
+        if ($date) {
+            $dateStr = substr($date, 0, 10);
+            $closedModule = ModuleTrimestriel::where('paroisse_configuration_id', $paroisseId)
+                ->whereIn('statut', ['termine', 'cloture', 'clos'])
+                ->whereDate('date_debut', '<=', $dateStr)
+                ->whereDate('date_fin', '>=', $dateStr)
+                ->exists();
+            if ($closedModule) {
+                abort(response()->json([
+                    'status'  => 'error',
+                    'message' => 'Aucune modification n\'est à effectuer car le bilan est déjà validé.',
+                ], 403));
+            }
+        }
+
+        // 3. Bilan annuel / décisions déjà validées pour la classe
+        if ($classeId) {
+            $hasBilan = DB::table('decisions_fin_annee')
+                ->join('inscriptions_annuelles', 'decisions_fin_annee.inscription_annuelle_id', '=', 'inscriptions_annuelles.id')
+                ->where('inscriptions_annuelles.classe_id', $classeId)
+                ->whereNull('decisions_fin_annee.deleted_at')
+                ->exists();
+            if ($hasBilan) {
+                abort(response()->json([
+                    'status'  => 'error',
+                    'message' => 'Aucune modification n\'est à effectuer car le bilan est déjà validé.',
+                ], 403));
+            }
         }
     }
 }

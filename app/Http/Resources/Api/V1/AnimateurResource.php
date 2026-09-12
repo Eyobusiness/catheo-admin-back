@@ -11,6 +11,7 @@ class AnimateurResource extends JsonResource
     {
         return [
             'id'                 => $this->uuid,
+            'numero'             => $this->numero,
             'nom'                => $this->nom,
             'prenoms'            => $this->prenoms,
             'nom_complet'        => $this->nom_complet,

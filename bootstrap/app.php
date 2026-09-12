@@ -20,9 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SecurityHeadersMiddleware::class,
             \App\Http\Middleware\ApplyWorkingAnnee::class,
         ]);
-        // Alias pour le contrÃ´le des permissions CRUD : middleware('permission:module.action')
+        // Alias pour le contrôle des permissions CRUD et acteurs spécifiques
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
+            'animateur'  => \App\Http\Middleware\EnsureAnimateur::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

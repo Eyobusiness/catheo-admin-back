@@ -14,7 +14,19 @@ class ResetPasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email'                 => ['required', 'email', 'exists:users,email'],
+            'email' => [
+                'required',
+                'email',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    $email = strtolower(trim((string) $value));
+                    $existsInUsers = \App\Models\User::where('email', $email)->exists();
+                    $existsInAnimateurs = \App\Models\Animateur::where('email', $email)->exists();
+
+                    if (!$existsInUsers && !$existsInAnimateurs) {
+                        $fail('Aucun compte n\'est associé à cette adresse email.');
+                    }
+                },
+            ],
             'code'                  => ['required', 'string', 'size:6'],
             'password'              => ['required', 'string', 'min:8', 'confirmed'],
             'password_confirmation' => ['required', 'string'],

@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\AnimateurAuthController;
 use App\Http\Controllers\Api\V1\MenuController;
 use App\Http\Controllers\Api\V1\ProfilController;
 use App\Http\Controllers\Api\V1\UserController;
@@ -93,7 +94,8 @@ Route::prefix('auth')->group(function () {
     Route::post('/admin/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
     // 2. Connexion Animateurs de Catéchèse (Table animateurs)
-    Route::post('/animateurs/login', [AuthController::class, 'loginAnimateur'])->middleware('throttle:login');
+    Route::post('/animateurs/login', [AnimateurAuthController::class, 'login'])->middleware('throttle:login');
+    Route::post('/animateur/login', [AnimateurAuthController::class, 'login'])->middleware('throttle:login');
 
     // 3. Connexion Parents & Catéchumènes (Table catechumenes)
     Route::post('/parents/login', [AuthController::class, 'loginParent'])->middleware('throttle:login');
@@ -109,6 +111,23 @@ Route::prefix('auth')->group(function () {
         Route::post('/change-password', [AuthController::class, 'changePassword']);
         Route::post('/logout', [AuthController::class, 'logout']);
     });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// ESPACE ANIMATEUR (Authentification Dédiée, Ma Classe & Sécurité)
+// ─────────────────────────────────────────────────────────────────
+Route::post('/animateur/login', [AnimateurAuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/animateurs/login', [AnimateurAuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/animateur/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:6,1');
+Route::post('/animateur/verify-code', [AuthController::class, 'verifyResetCode'])->middleware('throttle:10,1');
+Route::post('/animateur/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:6,1');
+
+Route::middleware(['auth:sanctum', 'animateur'])->prefix('animateur')->group(function () {
+    Route::get('/me', [AnimateurAuthController::class, 'me']);
+    Route::put('/profile', [AnimateurAuthController::class, 'updateProfile']);
+    Route::post('/logout', [AnimateurAuthController::class, 'logout']);
+    Route::post('/change-password', [AnimateurAuthController::class, 'changePassword']);
+    Route::get('/ma-classe', [AnimateurAuthController::class, 'maClasse']);
 });
 
 // Routes protégées par authentification Sanctum + Permissions CRUD

@@ -26,7 +26,7 @@ class CreateCatecheseCommand extends Command
                             {--email= : Email de connexion de l\'administrateur}
                             {--password= : Mot de passe de l\'administrateur}
                             {--nom-admin= : Nom complet de l\'administrateur}
-                            {--with-year : Créer une année pastorale par défaut (optionnel, l'admin doit la créer après connexion)}
+                            {--with-year : Créer une année pastorale par défaut (optionnel, l\'admin doit la créer après connexion)}
                             {--with-defaults : Créer également les sections et niveaux standards}';
 
     /**

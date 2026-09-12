@@ -134,6 +134,7 @@ class AnimateurController extends Controller
 
         $validated = $request->validate([
             'nom'        => ['sometimes', 'required', 'string', 'max:255'],
+            'numero'     => ['sometimes', 'nullable', 'string', 'max:50'],
             'prenoms'    => ['sometimes', 'required', 'string', 'max:255'],
             'sexe'       => ['sometimes', 'required', 'string', 'in:M,F,m,f'],
             'telephone'  => ['nullable', 'string', 'max:30'],
