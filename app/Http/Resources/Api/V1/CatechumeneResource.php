@@ -22,6 +22,15 @@ class CatechumeneResource extends JsonResource
 
         $phone = $this->telephone ?: ($this->telephone_pere ?: ($this->telephone_mere ?: $this->telephone_tuteur));
 
+        $photoUrl = null;
+        if ($this->photo_path) {
+            if (str_starts_with($this->photo_path, 'http://') || str_starts_with($this->photo_path, 'https://') || str_starts_with($this->photo_path, 'data:')) {
+                $photoUrl = $this->photo_path;
+            } else {
+                $photoUrl = asset('storage/' . ltrim($this->photo_path, '/'));
+            }
+        }
+
         return [
             'id'                          => $this->uuid,
             'uuid'                        => $this->uuid,
@@ -43,16 +52,20 @@ class CatechumeneResource extends JsonResource
             'situation_matrimoniale'      => $this->situation_matrimoniale,
             'telephone'                   => $phone,
             'photo_path'                  => $this->photo_path,
-            'photo_url'                   => $this->photo_path,
+            'photo_url'                   => $photoUrl,
 
             // Shortcuts Inscription Active pour les sélecteurs et tables
-            'classe_id'                   => $latestInscription?->classe?->uuid,
+            'classe_id'                   => (string) ($latestInscription?->classe_id ?? $latestInscription?->classe?->uuid),
+            'classe_uuid'                 => $latestInscription?->classe?->uuid,
             'classe_nom'                  => $latestInscription?->classe?->nom,
-            'niveau_id'                   => $latestInscription?->niveau?->uuid,
+            'niveau_id'                   => (string) ($latestInscription?->niveau_id ?? $latestInscription?->niveau?->uuid),
+            'niveau_uuid'                 => $latestInscription?->niveau?->uuid,
             'niveau_nom'                  => $latestInscription?->niveau?->nom,
-            'section_id'                  => $latestInscription?->section?->uuid ?? $latestInscription?->niveau?->section?->uuid,
+            'section_id'                  => (string) ($latestInscription?->section_id ?? $latestInscription?->section?->uuid ?? $latestInscription?->niveau?->section_id),
+            'section_uuid'                => $latestInscription?->section?->uuid ?? $latestInscription?->niveau?->section?->uuid,
             'section_nom'                 => $latestInscription?->section?->nom ?? $latestInscription?->niveau?->section?->nom,
-            'annee_catechese_id'          => $latestInscription?->anneeCatechese?->uuid,
+            'annee_catechese_id'          => (string) ($latestInscription?->annee_catechese_id ?? $latestInscription?->anneeCatechese?->uuid),
+            'annee_catechese_uuid'        => $latestInscription?->anneeCatechese?->uuid,
             'annee_libelle'               => $latestInscription?->anneeCatechese?->libelle,
             
             // Filiation & Tuteurs

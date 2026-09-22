@@ -111,11 +111,22 @@ class MatriculeGeneratorService
         $code = null;
 
         if ($section instanceof Section) {
-            $code = $section->code;
-        } elseif (is_string($section)) {
-            $code = $section;
+            $code = $section->code ?? $section->nom;
         } elseif (is_numeric($section)) {
-            $code = Section::find((int) $section)?->code;
+            $secModel = Section::find((int) $section);
+            $code = $secModel?->code ?? $secModel?->nom;
+        } elseif (is_string($section)) {
+            $str = trim($section);
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $str)) {
+                $secModel = Section::where('uuid', $str)->first();
+                $code = $secModel?->code ?? $secModel?->nom ?? $str;
+            } elseif (is_numeric($str)) {
+                $secModel = Section::find((int) $str);
+                $code = $secModel?->code ?? $secModel?->nom ?? $str;
+            } else {
+                $secModel = Section::where('code', $str)->orWhere('nom', $str)->first();
+                $code = $secModel?->code ?? $str;
+            }
         }
 
         if (empty($code)) {
@@ -128,15 +139,15 @@ class MatriculeGeneratorService
 
         $normalized = strtoupper(trim($code));
 
-        if ($normalized === 'SEC-JEUNE' || $normalized === 'SEC-JEUNES') {
+        if (str_contains($normalized, 'JEUNE')) {
             return 'J';
         }
 
-        if ($normalized === 'SEC-ADULTE' || $normalized === 'SEC-ADULTES') {
+        if (str_contains($normalized, 'ADULTE')) {
             return 'A';
         }
 
-        // Pour toutes les autres sections (SEC-ENF-PRI, SEC-ENF-COL, SEC-ENFANCE, etc.)
+        // Pour toutes les autres sections (SEC-ENF-PRI, SEC-ENFANTS-PRI, SEC-ENF-COL, SEC-ENFANTS-COL, SEC-ENFANCE, etc.)
         return 'E';
     }
 

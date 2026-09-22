@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
-
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +25,7 @@ class OperationPaiement extends Model
         'libelle',
         'montant',
         'montant_paye',
+        'remise',
         'echeance',
         'statut',
     ];
@@ -33,6 +33,7 @@ class OperationPaiement extends Model
     protected $casts = [
         'montant' => 'decimal:2',
         'montant_paye' => 'decimal:2',
+        'remise' => 'decimal:2',
         'echeance' => 'date',
     ];
 

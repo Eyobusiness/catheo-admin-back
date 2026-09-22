@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // ── Base de test propre (par défaut) ──────────────────────────────────
+        $this->call(ProduitSeeder::class);
         $this->call(MenuSeeder::class);
         $this->call(CleanTestDatabaseSeeder::class);
 

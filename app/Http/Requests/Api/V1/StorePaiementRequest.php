@@ -62,6 +62,7 @@ class StorePaiementRequest extends FormRequest
                 },
             ],
             'operation_paiement_id' => ['nullable'],
+            'remise' => ['nullable', 'numeric', 'min:0'],
             'mode_paiement' => ['required', 'string'],
             'reference_transaction' => ['nullable', 'string', 'max:255'],
             'date_paiement' => ['required', 'date'],

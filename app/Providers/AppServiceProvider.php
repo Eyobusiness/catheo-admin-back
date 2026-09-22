@@ -23,13 +23,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Déconnexion et révocation automatique après 10 minutes d'inactivité
+        // Déconnexion et révocation automatique après 30 minutes d'inactivité
         \Laravel\Sanctum\Sanctum::authenticateAccessTokensUsing(function ($accessToken, $isValid) {
             if (! $isValid) {
                 return false;
             }
 
-            $inactivityMinutes = (int) config('sanctum.inactivity_timeout', 10);
+            $inactivityMinutes = (int) config('sanctum.inactivity_timeout', 30);
             if ($inactivityMinutes > 0) {
                 $lastActivity = $accessToken->last_used_at ?? $accessToken->created_at;
                 if ($lastActivity && $lastActivity->lt(now()->subMinutes($inactivityMinutes))) {

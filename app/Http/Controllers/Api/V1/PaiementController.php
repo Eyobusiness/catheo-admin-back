@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 class PaiementController extends Controller
 {
     /**
-     * Liste des paiements / reÃ§us avec pagination.
+     * Liste des paiements / reçus avec pagination.
      */
     public function index(Request $request): JsonResponse
     {
@@ -67,15 +67,21 @@ class PaiementController extends Controller
      */
     public function store(StorePaiementRequest $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user();
+        $paroisseId = $user->paroisse_configuration_id;
         $validated = $request->validated();
+
+        // Seul un utilisateur ADMIN a le droit de spécifier une remise
+        $profilCode = strtoupper(trim($user->profil?->code ?? $user->user_type ?? ''));
+        $isAdmin = in_array($profilCode, ['ADMIN', 'SUPER_ADMIN'], true) || str_contains($profilCode, 'ADMIN');
+
         $anneeVal = $validated['annee_catechese_id'];
         $annee = is_numeric($anneeVal)
             ? AnneeCatechese::find($anneeVal)
             : AnneeCatechese::where('uuid', $anneeVal)->first();
 
         if (!$annee) {
-            return response()->json(['status' => 'error', 'message' => 'AnnÃ©e de catÃ©chÃ¨se introuvable.'], 404);
+            return response()->json(['status' => 'error', 'message' => 'Année de catéchèse introuvable.'], 404);
         }
 
         $inscription = null;
@@ -92,7 +98,7 @@ class PaiementController extends Controller
             $catechumene = is_numeric($catVal) ? Catechumene::find($catVal) : Catechumene::where('uuid', $catVal)->first();
         }
 
-        $paiement = DB::transaction(function () use ($paroisseId, $annee, $inscription, $catechumene, $validated) {
+        $paiement = DB::transaction(function () use ($paroisseId, $annee, $inscription, $catechumene, $validated, $isAdmin) {
             // 1. Calculer le montant total
             $montantTotal = 0;
             foreach ($validated['lignes'] as $ligne) {
@@ -100,10 +106,18 @@ class PaiementController extends Controller
                 $montantTotal += $ligne['montant'] * $qte;
             }
 
-            // 2. GÃ©nÃ©rer le numÃ©ro de reÃ§u officiel unique (ex: REC26-124002-0001)
+            // Remise accordée (uniquement si ADMIN, sinon 0)
+            $remise = 0.0;
+            if ($isAdmin && isset($validated['remise'])) {
+                $remise = (float) $validated['remise'];
+                $remise = max(0, min($remise, $montantTotal));
+            }
+            $montantNet = max(0, $montantTotal - $remise);
+
+            // 2. Générer le numéro de reçu officiel unique (ex: REC26-124002-0001)
             $numeroRecu = app(\App\Services\ReceiptNumberGeneratorService::class)->generate($paroisseId, $validated['date_paiement']);
 
-            // 3. CrÃ©er le paiement
+            // 3. Créer le paiement
             $paiementObj = Paiement::create([
                 'paroisse_configuration_id' => $paroisseId,
                 'annee_catechese_id' => $annee->id,
@@ -111,6 +125,7 @@ class PaiementController extends Controller
                 'catechumene_id' => $catechumene?->id,
                 'numero_recu' => $numeroRecu,
                 'montant_total' => $montantTotal,
+                'remise' => $remise,
                 'mode_paiement' => $validated['mode_paiement'],
                 'reference_transaction' => $validated['reference_transaction'] ?? null,
                 'date_paiement' => $validated['date_paiement'],
@@ -118,7 +133,7 @@ class PaiementController extends Controller
                 'notes' => $validated['notes'] ?? null,
             ]);
 
-            // 4. CrÃ©er les lignes de dÃ©tail du paiement
+            // 4. Créer les lignes de détail du paiement
             foreach ($validated['lignes'] as $l) {
                 $tarifId = null;
                 if (!empty($l['tarif_id']) && $l['tarif_id'] !== 'null' && $l['tarif_id'] !== 'undefined') {
@@ -139,12 +154,12 @@ class PaiementController extends Controller
                 ]);
             }
 
-            // 5. Mettre Ã  jour l'inscription si paiement des frais d'inscription
+            // 5. Mettre à jour l'inscription si paiement des frais d'inscription
             if ($inscription) {
                 $inscription->update(['frais_inscription_payes' => true]);
             }
 
-            // Mettre Ã  jour l'opÃ©ration de paiement associÃ©e
+            // Mettre à jour l'opération de paiement associée
             $updatedOperations = false;
             foreach ($validated['lignes'] as $l) {
                 if (!empty($l['operation_paiement_id'])) {
@@ -153,7 +168,8 @@ class PaiementController extends Controller
                     if ($opObj) {
                         $opObj->update([
                             'statut' => 'paye',
-                            'montant_paye' => $l['montant'] * ($l['quantite'] ?? 1),
+                            'montant_paye' => $montantNet,
+                            'remise' => $remise,
                         ]);
                         $updatedOperations = true;
                     }
@@ -166,7 +182,8 @@ class PaiementController extends Controller
                 if ($topOp) {
                     $topOp->update([
                         'statut' => 'paye',
-                        'montant_paye' => $montantTotal,
+                        'montant_paye' => $montantNet,
+                        'remise' => $remise,
                     ]);
                     $updatedOperations = true;
                 }
@@ -179,19 +196,20 @@ class PaiementController extends Controller
                     ->where('statut', 'en_attente')
                     ->update([
                         'statut' => 'paye',
-                        'montant_paye' => $montantTotal,
+                        'montant_paye' => $montantNet,
+                        'remise' => $remise,
                     ]);
             }
 
-            // 6. Ã‰criture automatique dans la caisse paroissiale
+            // 6. Écriture automatique dans la caisse paroissiale du montant réellement encaissé (montantNet)
             CaisseParoissiale::create([
                 'paroisse_configuration_id' => $paroisseId,
                 'annee_catechese_id' => $annee->id,
                 'type_mouvement' => 'entree',
                 'categorie' => 'inscription',
-                'montant' => $montantTotal,
+                'montant' => $montantNet,
                 'reference_document' => $numeroRecu,
-                'libelle' => "Encaissement ReÃ§u NÂ° {$numeroRecu} - " . ($catechumene ? $catechumene->nom . ' ' . $catechumene->prenoms : 'CatÃ©chumÃ¨ne'),
+                'libelle' => "Encaissement Reçu N° {$numeroRecu}" . ($remise > 0 ? " (Remise: {$remise} F)" : "") . " - " . ($catechumene ? $catechumene->nom . ' ' . $catechumene->prenoms : 'Catéchumène'),
                 'date_mouvement' => $validated['date_paiement'],
             ]);
 
@@ -202,13 +220,13 @@ class PaiementController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => "Paiement enregistrÃ© avec succÃ¨s. NÂ° ReÃ§u : {$paiement->numero_recu}",
+            'message' => "Paiement enregistré avec succès. N° Reçu : {$paiement->numero_recu}",
             'data' => new PaiementResource($paiement),
         ], 201);
     }
 
     /**
-     * DÃ©tails d'un paiement.
+     * Détails d'un paiement.
      */
     public function show(Request $request, Paiement $paiement): JsonResponse
     {
@@ -273,6 +291,10 @@ class PaiementController extends Controller
             ];
         });
 
+        $remise = (float) ($item->remise ?? 0);
+        $montantTotal = (float) $item->montant_total;
+        $montantNet = max(0, $montantTotal - $remise);
+
         return response()->json([
             'status'   => 'success',
             'entete'   => $entete,
@@ -286,7 +308,9 @@ class PaiementController extends Controller
                 'heure_paiement'        => $item->created_at?->format('H:i'),
                 'mode_paiement'         => $item->mode_paiement,
                 'mode_paiement_libelle' => ucfirst(str_replace('_', ' ', $item->mode_paiement ?? '')),
-                'montant_total'         => (float) $item->montant_total,
+                'montant_total'         => $montantTotal,
+                'remise'                => $remise,
+                'montant_net'           => $montantNet,
                 'devise'                => 'FCFA',
                 'format_recommande'     => $format,
                 'statut'                => $item->statut,
@@ -318,7 +342,7 @@ class PaiementController extends Controller
     }
 
     /**
-     * Effectuer un remboursement sur un paiement / reÃ§u donnÃ©.
+     * Effectuer un remboursement sur un paiement / reçu donné.
      */
     public function rembourser(Request $request, string $uuid): JsonResponse
     {
@@ -336,7 +360,7 @@ class PaiementController extends Controller
         if ($paiement->statut === 'annule' || $paiement->statut === 'rembourse') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Ce paiement a dÃ©jÃ  Ã©tÃ© remboursÃ© ou annulÃ©.',
+                'message' => 'Ce paiement a déjà été remboursé ou annulé.',
             ], 422);
         }
 
@@ -345,10 +369,10 @@ class PaiementController extends Controller
         DB::transaction(function () use ($paroisseId, $paiement, $montantRembourse, $validated) {
             $paiement->update([
                 'statut' => 'rembourse',
-                'notes' => trim(($paiement->notes ?? '') . " | RemboursÃ©: {$montantRembourse} F. Motif: " . $validated['motif']),
+                'notes' => trim(($paiement->notes ?? '') . " | Remboursé: {$montantRembourse} F. Motif: " . $validated['motif']),
             ]);
 
-            // Enregistrer l'opÃ©ration de remboursement dans la caisse
+            // Enregistrer l'opération de remboursement dans la caisse
             CaisseParoissiale::create([
                 'paroisse_configuration_id' => $paroisseId,
                 'annee_catechese_id' => $paiement->annee_catechese_id,
@@ -356,14 +380,14 @@ class PaiementController extends Controller
                 'categorie' => 'remboursement',
                 'montant' => $montantRembourse,
                 'reference_document' => 'RMB-' . $paiement->numero_recu,
-                'libelle' => "Remboursement ReÃ§u NÂ° {$paiement->numero_recu} - Motif: " . $validated['motif'],
+                'libelle' => "Remboursement Reçu N° {$paiement->numero_recu} - Motif: " . $validated['motif'],
                 'date_mouvement' => now()->toDateString(),
             ]);
         });
 
         return response()->json([
             'status' => 'success',
-            'message' => "Remboursement de {$montantRembourse} F effectuÃ© avec succÃ¨s sur le reÃ§u NÂ° {$paiement->numero_recu}.",
+            'message' => "Remboursement de {$montantRembourse} F effectué avec succès sur le reçu N° {$paiement->numero_recu}.",
             'data' => $paiement->fresh(['catechumene', 'lignes']),
         ]);
     }
@@ -371,8 +395,7 @@ class PaiementController extends Controller
     private function authorizeTenant(?int $userParoisseId, int $targetParoisseId): void
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
-            abort(response()->json(['status' => 'error', 'message' => 'AccÃ¨s refusÃ©.'], 403));
+            abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
         }
     }
 }
-

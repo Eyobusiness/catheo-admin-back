@@ -87,4 +87,14 @@ class InscriptionAnnuelle extends Model
     {
         return $this->belongsTo(Mouvement::class, 'mouvement_id');
     }
+
+    public function decisionFinAnnee(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(DecisionFinAnnee::class, 'inscription_annuelle_id');
+    }
+
+    public function anneePastorale(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->anneeCatechese();
+    }
 }

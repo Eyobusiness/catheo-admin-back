@@ -16,6 +16,7 @@ class OperationPaiementResource extends JsonResource
             'libelle'            => $this->libelle,
             'montant'            => (float) $this->montant,
             'montant_paye'       => (float) $this->montant_paye,
+            'remise'             => (float) ($this->remise ?? 0),
             'echeance'           => $this->echeance ? (is_string($this->echeance) ? substr($this->echeance, 0, 10) : $this->echeance->toDateString()) : null,
             'statut'             => $this->statut,
             'annee_catechese_id' => $this->anneeCatechese?->uuid ?? (string) $this->annee_catechese_id,

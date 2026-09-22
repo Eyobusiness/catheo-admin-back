@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
-
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +24,7 @@ class Paiement extends Model
         'catechumene_id',
         'numero_recu',
         'montant_total',
+        'remise',
         'mode_paiement',
         'reference_transaction',
         'date_paiement',
@@ -34,6 +34,7 @@ class Paiement extends Model
 
     protected $casts = [
         'montant_total' => 'decimal:2',
+        'remise' => 'decimal:2',
         'date_paiement' => 'date',
     ];
 

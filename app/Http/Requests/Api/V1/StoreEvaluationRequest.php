@@ -50,13 +50,13 @@ class StoreEvaluationRequest extends FormRequest
             'note_max'              => ['nullable', 'numeric', 'min:1', 'max:100'],
             'date_evaluation'       => ['required', 'date'],
             'statut'                => ['nullable', 'string'],
-            'annee_catechese_id'    => ['nullable', 'string'],
-            'classe_id'             => ['nullable', 'string'],
-            'module_trimestriel_id' => ['nullable', 'string'],
+            'annee_catechese_id'    => ['nullable'],
+            'classe_id'             => ['nullable'],
+            'module_trimestriel_id' => ['nullable'],
             'periode'               => ['nullable', 'string'],
-            'section_id'            => ['nullable', 'string'],
-            'session_id'            => ['nullable', 'string'],
-            'niveau_id'             => ['nullable', 'string'],
+            'section_id'            => ['nullable'],
+            'session_id'            => ['nullable'],
+            'niveau_id'             => ['nullable'],
         ];
     }
 

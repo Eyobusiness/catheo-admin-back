@@ -49,10 +49,36 @@ class ApplyWorkingAnnee
 
             if (!$isAnneeCatalogRoute && !$explicitAll) {
                 if (!$request->filled('annee_catechese_id')) {
-                    $request->merge([
-                        'annee_catechese_id' => (string) $annee->id,
-                        'working_annee_id'   => $annee->id,
-                    ]);
+                    if ($request->isMethod('GET')) {
+                        $request->merge([
+                            'annee_catechese_id' => (string) ($annee->uuid ?: $annee->id),
+                            'working_annee_id'   => $annee->id,
+                            'working_annee_uuid' => $annee->uuid,
+                        ]);
+                    } elseif ($request->isMethod('POST')) {
+                        $request->merge([
+                            'annee_catechese_id' => $annee->id,
+                            'working_annee_id'   => $annee->id,
+                            'working_annee_uuid' => $annee->uuid,
+                        ]);
+                    } else {
+                        // Pour PUT, PATCH, DELETE, ne pas injecter annee_catechese_id dans la payload
+                        $request->merge([
+                            'working_annee_id'   => $annee->id,
+                            'working_annee_uuid' => $annee->uuid,
+                        ]);
+                    }
+                } else {
+                    $val = $request->input('annee_catechese_id');
+                    $foundAnnee = is_numeric($val)
+                        ? AnneeCatechese::find((int) $val)
+                        : AnneeCatechese::where('uuid', $val)->first();
+                    if ($foundAnnee) {
+                        $request->merge([
+                            'working_annee_id'   => $foundAnnee->id,
+                            'working_annee_uuid' => $foundAnnee->uuid,
+                        ]);
+                    }
                 }
             }
         }

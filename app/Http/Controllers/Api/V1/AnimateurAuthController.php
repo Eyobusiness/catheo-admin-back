@@ -251,7 +251,7 @@ class AnimateurAuthController extends Controller
         if (!$affectation || !$affectation->classe) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Aucune affectation de classe n\'a été trouvée pour votre compte animateur.',
+                'message' => 'Votre affectation pour l\'année de catéchèse active n\'a pas été trouvée.',
             ], 404);
         }
 

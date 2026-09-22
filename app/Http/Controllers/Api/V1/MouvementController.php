@@ -22,6 +22,15 @@ class MouvementController extends Controller
             ?? $request->header('X-Paroisse-Id');
 
         if (!$paroisseId) {
+            if ($request->filled('campagne_id') || $request->filled('campagne')) {
+                $campVal = $request->input('campagne_id') ?? $request->input('campagne');
+                $paroisseId = \App\Models\CampagnePreinscription::where('uuid', $campVal)->orWhere('id', $campVal)->value('paroisse_configuration_id');
+            }
+            if (!$paroisseId) {
+                $paroisseId = \App\Models\CatecheseConfiguration::value('id');
+            }
+        }
+        if (!$paroisseId) {
             return response()->json([
                 'status' => 'success',
                 'meta'   => ['total_elements' => 0],

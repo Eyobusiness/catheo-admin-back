@@ -21,6 +21,7 @@ class User extends Authenticatable
     protected $fillable = [
         'uuid',
         'paroisse_configuration_id',
+        'organisation_id',
         'profil_id',
         'user_type', // admin, animateur, parent
         'username',  // code_catechumene ou matricule
@@ -67,6 +68,11 @@ class User extends Authenticatable
         return $this->catechese();
     }
 
+    public function organisation(): BelongsTo
+    {
+        return $this->belongsTo(Organisation::class, 'organisation_id');
+    }
+
     public function profil(): BelongsTo
     {
         return $this->belongsTo(Profil::class, 'profil_id');
@@ -80,6 +86,23 @@ class User extends Authenticatable
     public function catechumene(): HasOne
     {
         return $this->hasOne(Catechumene::class, 'user_id');
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->user_type === 'super_admin'
+            || $this->profil?->code === 'SUPER_ADMIN'
+            || in_array('*', (array) ($this->profil?->permissions ?? []), true);
+    }
+
+    public function isParoisseAdmin(): bool
+    {
+        return !empty($this->paroisse_configuration_id) && empty($this->organisation_id);
+    }
+
+    public function isOrganisationUser(): bool
+    {
+        return !empty($this->organisation_id);
     }
 
     public function getNomAttribute(): string

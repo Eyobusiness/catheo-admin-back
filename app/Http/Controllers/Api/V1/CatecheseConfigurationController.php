@@ -25,6 +25,15 @@ class CatecheseConfigurationController extends Controller
             ?? $request->input('code_paroisse');
 
         if (!$paroisseId) {
+            if ($request->filled('campagne_id') || $request->filled('campagne')) {
+                $campVal = $request->input('campagne_id') ?? $request->input('campagne');
+                $paroisseId = \App\Models\CampagnePreinscription::where('uuid', $campVal)->orWhere('id', $campVal)->value('paroisse_configuration_id');
+            }
+            if (!$paroisseId) {
+                $paroisseId = CatecheseConfiguration::value('id');
+            }
+        }
+        if (!$paroisseId) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Aucune configuration de catéchèse rattachée au compte actuel ou spécifiée.',

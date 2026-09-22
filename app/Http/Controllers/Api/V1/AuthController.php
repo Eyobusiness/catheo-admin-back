@@ -61,6 +61,13 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($user->organisation_id && $user->organisation && $user->organisation->statut !== 'actif') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => "L'organisation rattachée à cet utilisateur est {$user->organisation->statut}.",
+            ], 403);
+        }
+
         $user->update(['dernier_login_at' => now()]);
         $token = $user->createToken($request->get('device_name', 'CatheoAdminToken'))->plainTextToken;
         $anneeCourante = AnneeCatechese::getAnneeCourante($user->paroisse_configuration_id);

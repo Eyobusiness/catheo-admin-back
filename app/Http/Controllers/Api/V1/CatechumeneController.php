@@ -14,6 +14,7 @@ use App\Models\Classe;
 use App\Models\Catechumene;
 use App\Models\Niveau;
 use App\Models\Section;
+use App\Models\InscriptionAnnuelle;
 use App\Services\ParoisseHeaderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -198,35 +199,53 @@ class CatechumeneController extends Controller
      */
     public function showByMatricule(Request $request, string $code): JsonResponse
     {
-        $user = $request->user();
+        $user = $request->user() ?? auth('sanctum')->user();
         $paroisseId = $user?->paroisse_configuration_id 
             ?? $request->input('paroisse_configuration_id')
             ?? $request->input('paroisse_id')
             ?? $request->header('X-Paroisse-Id')
             ?? $request->header('X-Paroisse-Configuration-Id');
+
+        if (!$paroisseId && ($request->filled('campagne_id') || $request->filled('campagne'))) {
+            $campVal = $request->input('campagne_id') ?? $request->input('campagne');
+            $paroisseId = \App\Models\CampagnePreinscription::where('uuid', $campVal)
+                ->orWhere('id', $campVal)
+                ->value('paroisse_configuration_id');
+        }
+
         $trimmedCode = strtolower(trim($code));
 
-        $query = Catechumene::with([
+        $relations = [
             'ceb',
             'inscriptionsAnnuelles.anneeCatechese',
             'inscriptionsAnnuelles.section',
             'inscriptionsAnnuelles.niveau',
             'inscriptionsAnnuelles.classe',
+            'inscriptionsAnnuelles.decisionFinAnnee',
             'parrainsMarraines',
-        ]);
+        ];
 
+        $applyCriteria = function ($q) use ($trimmedCode) {
+            $q->where(function ($sq) use ($trimmedCode) {
+                $sq->whereRaw('LOWER(matricule) = ?', [$trimmedCode])
+                   ->orWhere('uuid', $trimmedCode);
+                if (is_numeric($trimmedCode)) {
+                    $sq->orWhere('id', (int) $trimmedCode);
+                }
+            });
+        };
+
+        $query = Catechumene::with($relations);
         if ($paroisseId) {
-            $query->where('paroisse_configuration_id', $paroisseId);
-        } elseif (!$user || ($user->user_type !== 'super_admin' && $user->profil?->code !== 'SUPER_ADMIN')) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Aucun catéchumène trouvé avec ce matricule.',
-            ], 404);
+            $query->where('paroisse_configuration_id', (int) $paroisseId);
         }
 
-        $catechumene = $query->where(function ($q) use ($trimmedCode) {
-            $q->whereRaw('LOWER(matricule) = ?', [$trimmedCode]);
-        })->first();
+        $catechumene = $query->where($applyCriteria)->first();
+
+        // Fallback sans filtre de paroisse si aucun catéchumène trouvé avec la restriction
+        if (!$catechumene && $paroisseId) {
+            $catechumene = Catechumene::with($relations)->where($applyCriteria)->first();
+        }
 
         if (!$catechumene) {
             return response()->json([
@@ -235,9 +254,15 @@ class CatechumeneController extends Controller
             ], 404);
         }
 
+        $progressionService = app(\App\Services\ProgressionPastoraleService::class);
+        $progression = $progressionService->calculerProgression($catechumene, $paroisseId ? (int) $paroisseId : null);
+
+        $resourceData = (new CatechumeneResource($catechumene))->resolve($request);
+        $resourceData['progression_pastorale'] = $progression;
+
         return response()->json([
             'status' => 'success',
-            'data'   => new CatechumeneResource($catechumene),
+            'data'   => $resourceData,
         ]);
     }
 
@@ -419,7 +444,23 @@ class CatechumeneController extends Controller
         $validated['statut'] = $validated['statut'] ?? 'actif';
 
         $catechumene = Catechumene::create($validated);
-        $catechumene->load(['ceb', 'parrainsMarraines']);
+
+        $this->syncInscription(
+            $catechumene,
+            $request->input('section_id'),
+            $request->input('niveau_id'),
+            $request->input('classe_id'),
+            $request->input('annee_catechese_id')
+        );
+
+        $catechumene->load([
+            'ceb',
+            'inscriptionsAnnuelles.anneeCatechese',
+            'inscriptionsAnnuelles.section',
+            'inscriptionsAnnuelles.niveau',
+            'inscriptionsAnnuelles.classe',
+            'parrainsMarraines',
+        ]);
 
         return response()->json([
             'status'  => 'success',
@@ -444,9 +485,15 @@ class CatechumeneController extends Controller
             'parrainsMarraines',
         ]);
 
+        $progressionService = app(\App\Services\ProgressionPastoraleService::class);
+        $progression = $progressionService->calculerProgression($catechumene, $paroisseId ? (int) $paroisseId : null);
+
+        $resourceData = (new CatechumeneResource($catechumene))->resolve($request);
+        $resourceData['progression_pastorale'] = $progression;
+
         return response()->json([
             'status' => 'success',
-            'data'   => new CatechumeneResource($catechumene),
+            'data'   => $resourceData,
         ]);
     }
 
@@ -469,7 +516,18 @@ class CatechumeneController extends Controller
 
         $this->handlePhotoUpload($validated, $catechumene->paroisse_configuration_id);
 
+        $sectionVal = $validated['section_id'] ?? $request->input('section_id');
+        $niveauVal  = $validated['niveau_id'] ?? $request->input('niveau_id');
+        $classeVal  = $validated['classe_id'] ?? $request->input('classe_id');
+        $anneeVal   = $validated['annee_catechese_id'] ?? $request->input('annee_catechese_id');
+        unset($validated['section_id'], $validated['niveau_id'], $validated['classe_id'], $validated['annee_catechese_id']);
+
         $catechumene->update($validated);
+
+        if ($sectionVal !== null || $niveauVal !== null || $classeVal !== null || $anneeVal !== null) {
+            $this->syncInscription($catechumene, $sectionVal, $niveauVal, $classeVal, $anneeVal);
+        }
+
         $catechumene->load([
             'ceb',
             'inscriptionsAnnuelles.anneeCatechese',
@@ -542,6 +600,113 @@ class CatechumeneController extends Controller
     {
         if ($userParoisseId && $userParoisseId !== $targetParoisseId) {
             abort(response()->json(['status' => 'error', 'message' => 'Accès refusé.'], 403));
+        }
+    }
+
+    /**
+     * Synchronise l'inscription annuelle d'un catéchumène (Section, Niveau, Classe, Année).
+     */
+    private function syncInscription(
+        Catechumene $catechumene,
+        mixed $sectionVal,
+        mixed $niveauVal,
+        mixed $classeVal,
+        mixed $anneeVal
+    ): void {
+        $annee = null;
+        if (!empty($anneeVal)) {
+            $annee = is_numeric($anneeVal)
+                ? AnneeCatechese::find((int) $anneeVal)
+                : AnneeCatechese::where('uuid', $anneeVal)->first();
+        }
+        if (!$annee) {
+            $annee = AnneeCatechese::where('paroisse_configuration_id', $catechumene->paroisse_configuration_id)
+                ->where('est_active', true)
+                ->first()
+                ?? AnneeCatechese::where('paroisse_configuration_id', $catechumene->paroisse_configuration_id)->latest('id')->first();
+        }
+
+        $section = null;
+        if (!empty($sectionVal)) {
+            $section = is_numeric($sectionVal)
+                ? Section::find((int) $sectionVal)
+                : Section::where('uuid', $sectionVal)->first();
+        }
+
+        $niveau = null;
+        if (!empty($niveauVal)) {
+            $niveau = is_numeric($niveauVal)
+                ? Niveau::find((int) $niveauVal)
+                : Niveau::where('uuid', $niveauVal)->first();
+            if (!$section && $niveau?->section_id) {
+                $section = $niveau->section;
+            }
+        }
+
+        $classe = null;
+        if (!empty($classeVal)) {
+            $classe = is_numeric($classeVal)
+                ? Classe::find((int) $classeVal)
+                : Classe::where('uuid', $classeVal)->first();
+            if (!$niveau && $classe?->niveau_id) {
+                $niveau = $classe->niveau;
+            }
+            if (!$section && $classe?->niveau?->section_id) {
+                $section = $classe->niveau->section;
+            }
+        }
+
+        if (!$section && $catechumene->paroisse_configuration_id) {
+            $section = Section::where('paroisse_configuration_id', $catechumene->paroisse_configuration_id)->orderBy('ordre_affichage')->first();
+        }
+        if (!$niveau && $section && $catechumene->paroisse_configuration_id) {
+            $niveau = Niveau::where('section_id', $section->id)->where('paroisse_configuration_id', $catechumene->paroisse_configuration_id)->orderBy('ordre_affichage')->first();
+        }
+        if (!$niveau && $catechumene->paroisse_configuration_id) {
+            $niveau = Niveau::where('paroisse_configuration_id', $catechumene->paroisse_configuration_id)->orderBy('ordre_affichage')->first();
+        }
+
+        $anneeId = $annee?->id;
+        if (!$anneeId) {
+            return;
+        }
+
+        $inscription = InscriptionAnnuelle::where('catechumene_id', $catechumene->id)
+            ->where('annee_catechese_id', $anneeId)
+            ->first();
+
+        if (!$inscription) {
+            $inscription = InscriptionAnnuelle::where('catechumene_id', $catechumene->id)
+                ->latest('id')
+                ->first();
+        }
+
+        $updateData = [
+            'section_id' => $section?->id,
+            'niveau_id'  => $niveau?->id,
+            'classe_id'  => $classe?->id,
+            'ceb_id'     => $catechumene->ceb_id,
+        ];
+
+        if ($inscription) {
+            if ($anneeId) {
+                $updateData['annee_catechese_id'] = $anneeId;
+            }
+            $inscription->update($updateData);
+        } else {
+            InscriptionAnnuelle::create([
+                'paroisse_configuration_id' => $catechumene->paroisse_configuration_id,
+                'catechumene_id'            => $catechumene->id,
+                'annee_catechese_id'        => $anneeId,
+                'section_id'                => $section?->id,
+                'niveau_id'                 => $niveau?->id,
+                'classe_id'                 => $classe?->id,
+                'ceb_id'                    => $catechumene->ceb_id,
+                'code_inscription'          => 'INS-' . ($catechumene->matricule ?: $catechumene->id) . '-' . date('Y'),
+                'date_inscription'          => now()->toDateString(),
+                'statut_inscription'        => 'validee',
+                'frais_inscription_payes'   => true,
+            ]);
         }
     }
 }

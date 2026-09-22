@@ -140,4 +140,21 @@ class CatecheseConfiguration extends Model
     {
         return $this->hasMany(AnneeCatechese::class, 'paroisse_configuration_id');
     }
+
+    /**
+     * Organisations rattachées à cette paroisse (OPPE, OPPJ, OPPA).
+     */
+    public function organisations(): HasMany
+    {
+        return $this->hasMany(Organisation::class, 'paroisse_configuration_id');
+    }
+
+    /**
+     * Abonnements de la paroisse aux différents produits de la plateforme.
+     */
+    public function abonnements(): HasMany
+    {
+        return $this->hasMany(Abonnement::class, 'paroisse_configuration_id');
+    }
 }
+

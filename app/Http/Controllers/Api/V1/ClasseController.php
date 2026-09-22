@@ -38,7 +38,7 @@ class ClasseController extends Controller
             ->withCount('inscriptionsAnnuelles')
             ->where('paroisse_configuration_id', (int) $paroisseId);
 
-        if ($request->input('annee_catechese_id') !== 'all') {
+        if ($request->input('annee_catechese_id') !== 'all' && !$request->boolean('all_years') && !$request->boolean('all')) {
             $annee = AnneeCatechese::resolveAnnee($request, (int) $paroisseId);
             if ($annee) {
                 $query->where('annee_catechese_id', $annee->id);
@@ -65,9 +65,23 @@ class ClasseController extends Controller
             $query->where('statut', strtolower($request->statut));
         }
 
-        $classes = $query->latest()->paginate($this->getPerPage($request));
+        // Si la requête demande explicitement la pagination
+        if ($request->boolean('paginate') || $request->has('page')) {
+            $perPage = $request->input('per_page') ? (int) $request->input('per_page') : $this->getPerPage($request);
+            $classes = $query->latest()->paginate($perPage);
+            return $this->paginatedResponse($classes, ClasseResource::class);
+        }
 
-        return $this->paginatedResponse($classes, ClasseResource::class);
+        // Par défaut, retourner toute la collection pour alimenter les listes, formulaires et tableaux à pagination locale
+        $classes = $query->latest()->get();
+
+        return response()->json([
+            'status' => 'success',
+            'meta'   => [
+                'total_elements' => $classes->count(),
+            ],
+            'data'   => ClasseResource::collection($classes),
+        ]);
     }
 
     /**
@@ -90,7 +104,7 @@ class ClasseController extends Controller
 
         $validated = $request->validate([
             'niveau_id'          => ['required', 'string', 'exists:niveaux,uuid'],
-            'annee_catechese_id' => ['nullable', 'string', 'exists:annee_catecheses,uuid'],
+            'annee_catechese_id' => ['nullable', 'string'],
             'nom'                => ['required', 'string', 'max:255'],
             'capacite_max'       => ['nullable', 'integer', 'min:1'],
             'statut'             => ['nullable', 'string', 'in:active,inactive'],
@@ -102,13 +116,37 @@ class ClasseController extends Controller
 
         // Récupération de l'année pastorale fournie ou active/en cours
         if (!empty($validated['annee_catechese_id'])) {
-            $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])
-                ->where('paroisse_configuration_id', (int) $paroisseId)
-                ->firstOrFail();
-            $anneeId = $annee->id;
+            $annee = AnneeCatechese::where('paroisse_configuration_id', (int) $paroisseId)
+                ->where(function($q) use ($validated) {
+                    $q->where('uuid', $validated['annee_catechese_id'])
+                      ->orWhere('id', $validated['annee_catechese_id']);
+                })->first();
+            $anneeId = $annee?->id;
         } else {
             $annee = AnneeCatechese::resolveAnnee($request, (int) $paroisseId);
             $anneeId = $annee?->id;
+        }
+
+        if (!$anneeId) {
+            $annee = AnneeCatechese::getAnneeCourante((int) $paroisseId);
+            $anneeId = $annee?->id;
+        }
+
+        // Vérification si la classe existe déjà
+        $existingClasse = Classe::where('paroisse_configuration_id', (int) $paroisseId)
+            ->where('annee_catechese_id', $anneeId)
+            ->where('niveau_id', $niveau->id)
+            ->whereRaw('LOWER(TRIM(nom)) = ?', [strtolower(trim($validated['nom']))])
+            ->first();
+
+        if ($existingClasse) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Cette classe existe déjà.',
+                'errors'  => [
+                    'nom' => ['Cette classe existe déjà.'],
+                ],
+            ], 422);
         }
 
         $classe = Classe::create([
@@ -155,7 +193,7 @@ class ClasseController extends Controller
 
         $validated = $request->validate([
             'niveau_id'          => ['sometimes', 'required', 'string', 'exists:niveaux,uuid'],
-            'annee_catechese_id' => ['sometimes', 'nullable', 'string', 'exists:annee_catecheses,uuid'],
+            'annee_catechese_id' => ['sometimes', 'nullable', 'string'],
             'nom'                => ['sometimes', 'required', 'string', 'max:255'],
             'capacite_max'       => ['nullable', 'integer', 'min:1'],
             'statut'             => ['nullable', 'string', 'in:active,inactive'],
@@ -176,10 +214,14 @@ class ClasseController extends Controller
         }
 
         if (!empty($validated['annee_catechese_id'])) {
-            $annee = AnneeCatechese::where('uuid', $validated['annee_catechese_id'])
-                ->where('paroisse_configuration_id', $classe->paroisse_configuration_id)
-                ->firstOrFail();
-            $updateData['annee_catechese_id'] = $annee->id;
+            $annee = AnneeCatechese::where('paroisse_configuration_id', $classe->paroisse_configuration_id)
+                ->where(function($q) use ($validated) {
+                    $q->where('uuid', $validated['annee_catechese_id'])
+                      ->orWhere('id', $validated['annee_catechese_id']);
+                })->first();
+            if ($annee) {
+                $updateData['annee_catechese_id'] = $annee->id;
+            }
         }
 
         if (!empty($validated['niveau_id'])) {

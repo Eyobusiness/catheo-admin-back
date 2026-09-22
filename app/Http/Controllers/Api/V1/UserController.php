@@ -23,24 +23,22 @@ class UserController extends Controller
         $user = $request->user() ?? auth('sanctum')->user();
         $paroisseId = $user?->paroisse_configuration_id 
             ?? $request->input('paroisse_configuration_id')
-            ?? $request->header('X-Paroisse-Id');
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
-        if (!$paroisseId) {
-            return response()->json([
-                'status' => 'success',
-                'meta'   => [
-                    'current_page'   => 1,
-                    'per_page'       => 15,
-                    'total_elements' => 0,
-                    'total_pages'    => 1,
-                    'has_next'       => false,
-                ],
-                'data'   => [],
-            ]);
+        $isSuperAdmin = $user && $user->isSuperAdmin();
+
+        $query = User::with(['paroisse', 'profil']);
+
+        if ($paroisseId) {
+            $query->where('paroisse_configuration_id', (int) $paroisseId);
+        } elseif (!$isSuperAdmin) {
+            $defaultParoisseId = \App\Models\CatecheseConfiguration::value('id');
+            if ($defaultParoisseId) {
+                $query->where('paroisse_configuration_id', (int) $defaultParoisseId);
+            }
         }
-
-        $query = User::with(['paroisse', 'profil'])
-            ->where('paroisse_configuration_id', (int) $paroisseId);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -71,6 +69,8 @@ class UserController extends Controller
         $perPage = (int) $request->get('per_page', 15);
         $paginator = $query->latest()->paginate($perPage);
 
+        $resourceCollection = UserResource::collection($paginator);
+
         return response()->json([
             'status' => 'success',
             'meta'   => [
@@ -80,7 +80,7 @@ class UserController extends Controller
                 'total_pages'    => $paginator->lastPage(),
                 'has_next'       => $paginator->hasMorePages(),
             ],
-            'data'   => UserResource::collection($paginator->items()),
+            'data'   => $resourceCollection->response()->getData(true),
         ]);
     }
 

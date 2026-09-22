@@ -132,11 +132,9 @@ class SeanceController extends Controller
 
         $request->merge($data);
 
-        $this->checkPeriodOrBilanLock($paroisseId, $model->date_seance?->toDateString(), $model->classe_id);
-
         $validated = $request->validate([
-            'annee_catechese_id' => ['nullable', 'string'],
-            'classe_id'          => ['required', 'string'],
+            'annee_catechese_id' => ['nullable'],
+            'classe_id'          => ['required'],
             'titre'              => ['required', 'string', 'max:255'],
             'description'        => ['nullable', 'string'],
             'date_seance'        => ['required', 'date'],
@@ -209,7 +207,8 @@ class SeanceController extends Controller
     public function update(Request $request, mixed $seance): JsonResponse
     {
         $model = $this->resolveSeance($seance);
-        $this->authorizeTenant($request->user()->paroisse_configuration_id, $model->paroisse_configuration_id);
+        $paroisseId = $request->user()?->paroisse_configuration_id ?? $model->paroisse_configuration_id;
+        $this->authorizeTenant($request->user()?->paroisse_configuration_id, $model->paroisse_configuration_id);
 
         $data = $request->all();
 
@@ -228,8 +227,8 @@ class SeanceController extends Controller
         $this->checkPeriodOrBilanLock($paroisseId, $model->date_seance?->toDateString(), $model->classe_id);
 
         $validated = $request->validate([
-            'annee_catechese_id' => ['sometimes', 'nullable', 'string'],
-            'classe_id'          => ['sometimes', 'nullable', 'string'],
+            'annee_catechese_id' => ['sometimes', 'nullable'],
+            'classe_id'          => ['sometimes', 'nullable'],
             'titre'              => ['sometimes', 'required', 'string', 'max:255'],
             'description'        => ['nullable', 'string'],
             'date_seance'        => ['sometimes', 'required', 'date'],

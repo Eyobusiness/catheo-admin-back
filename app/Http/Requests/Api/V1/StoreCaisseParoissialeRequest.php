@@ -16,7 +16,7 @@ class StoreCaisseParoissialeRequest extends FormRequest
         return [
             'annee_catechese_id' => ['required', 'string', 'exists:annee_catecheses,uuid'],
             'type_mouvement' => ['required', 'string', 'in:entree,sortie'],
-            'categorie' => ['required', 'string', 'in:inscription,don,cotisation,depense_fournitures,depense_evenement,autre'],
+            'categorie' => ['required', 'string', 'max:100'],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'reference_document' => ['nullable', 'string', 'max:255'],
             'libelle' => ['required', 'string', 'max:255'],

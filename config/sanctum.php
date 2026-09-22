@@ -62,7 +62,7 @@ return [
     |
     */
 
-    'inactivity_timeout' => env('SANCTUM_INACTIVITY_TIMEOUT', 10),
+    'inactivity_timeout' => env('SANCTUM_INACTIVITY_TIMEOUT', 30),
 
     /*
     |--------------------------------------------------------------------------

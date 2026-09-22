@@ -14,7 +14,11 @@ class UpdateCatechumeneRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'ceb_id'                       => ['nullable', 'string', 'exists:cebs,uuid'],
+            'ceb_id'                       => ['nullable'],
+            'section_id'                   => ['nullable'],
+            'niveau_id'                    => ['nullable'],
+            'classe_id'                    => ['nullable'],
+            'annee_catechese_id'           => ['nullable'],
             'nom'                          => ['sometimes', 'required', 'string', 'max:255'],
             'prenoms'                      => ['sometimes', 'required', 'string', 'max:255'],
             'sexe'                         => ['sometimes', 'required', 'string', 'in:M,F'],

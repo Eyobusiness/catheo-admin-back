@@ -42,7 +42,7 @@ class TarifController extends Controller
     {
         $paroisseId = $request->user()->paroisse_configuration_id;
 
-        $query = Tarif::with(['anneeCatechese', 'niveau.section', 'niveaux']);
+        $query = Tarif::with(['anneeCatechese', 'niveau.section', 'niveaux.section']);
 
         if ($paroisseId) {
             $query->where('paroisse_configuration_id', $paroisseId);
@@ -177,7 +177,8 @@ class TarifController extends Controller
             }
         }
 
-        $tarif->load(['anneeCatechese', 'niveau.section', 'niveaux']);
+        $tarif->refresh();
+        $tarif->load(['anneeCatechese', 'niveau.section', 'niveaux.section']);
 
         return response()->json([
             'status'  => 'success',
@@ -194,7 +195,7 @@ class TarifController extends Controller
         $item = $this->resolveTarif($tarif);
         $this->authorizeTenant($request->user()->paroisse_configuration_id, $item->paroisse_configuration_id);
 
-        $item->load(['anneeCatechese', 'niveau.section', 'niveaux']);
+        $item->load(['anneeCatechese', 'niveau.section', 'niveaux.section']);
 
         return response()->json([
             'status' => 'success',
@@ -250,17 +251,23 @@ class TarifController extends Controller
         $niveauUuids = $validated['niveau_ids'] ?? null;
         unset($validated['niveau_ids']);
 
-        $item->update($validated);
-
         if ($niveauUuids !== null) {
             $niveauIds = Niveau::where(function ($q) use ($niveauUuids) {
                 $q->whereIn('uuid', $niveauUuids)->orWhereIn('id', $niveauUuids);
             })->pluck('id')->toArray();
 
             $item->niveaux()->sync($niveauIds);
+
+            if (empty($niveauIds)) {
+                $validated['niveau_id'] = null;
+            } elseif (empty($validated['niveau_id'])) {
+                $validated['niveau_id'] = $niveauIds[0];
+            }
         }
 
-        $item->load(['anneeCatechese', 'niveau.section', 'niveaux']);
+        $item->update($validated);
+        $item->refresh();
+        $item->load(['anneeCatechese', 'niveau.section', 'niveaux.section']);
 
         return response()->json([
             'status'  => 'success',
@@ -279,7 +286,7 @@ class TarifController extends Controller
 
         $newStatus = ($item->statut === 'actif') ? 'inactif' : 'actif';
         $item->update(['statut' => $newStatus]);
-        $item->load(['anneeCatechese', 'niveau.section', 'niveaux']);
+        $item->load(['anneeCatechese', 'niveau.section', 'niveaux.section']);
 
         return response()->json([
             'status'  => 'success',

@@ -352,6 +352,75 @@ class PreinscriptionController extends Controller
         }
         $validated['type_demande'] = $typeDemande;
 
+        // Si RÉINSCRIPTION EN LIGNE : Calcul et vérification stricte de la progression pastorale
+        if ($typeDemande === 'reinscription') {
+            $catParam = $validated['catechumene_id'] ?? null;
+            $matriculeParam = $validated['matricule'] ?? null;
+            
+            $catechumene = null;
+            if ($catParam) {
+                $catechumene = is_numeric($catParam) 
+                    ? \App\Models\Catechumene::find($catParam) 
+                    : \App\Models\Catechumene::where('uuid', $catParam)->first();
+            }
+            if (!$catechumene && $matriculeParam) {
+                $catechumene = \App\Models\Catechumene::where('matricule', trim($matriculeParam))
+                    ->orWhere('uuid', trim($matriculeParam))
+                    ->first();
+            }
+
+            if ($catechumene) {
+                $validated['catechumene_id'] = $catechumene->id;
+                
+                // Calculer la progression pastorale pour la paroisse de la campagne
+                $progressionService = app(\App\Services\ProgressionPastoraleService::class);
+                $progression = $progressionService->calculerProgression($catechumene, (int) $paroisseId);
+
+                if ($progression['est_fin_parcours']) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'code'    => 'FIN_DE_PARCOURS',
+                        'message' => 'Félicitations, vous avez achevé le parcours catéchétique de cette section. Veuillez vous adresser au secrétariat paroissial.',
+                    ], 422);
+                }
+
+                if (!empty($progression['parcours_suivant'])) {
+                    $attenduSectionId = $progression['parcours_suivant']['section_id'];
+                    $attenduNiveauId = $progression['parcours_suivant']['niveau_id'];
+
+                    // Sécurité Backend : Rejeter toute tentative de modification arbitraire de la section ou du niveau
+                    $reqSectionParam = $request->input('section_souhaite_id') ?? $request->input('section_id');
+                    $reqNiveauParam = $request->input('niveau_souhaite_id') ?? $request->input('niveau_id');
+
+                    if ($reqSectionParam) {
+                        $reqSecId = is_numeric($reqSectionParam) ? (int)$reqSectionParam : \App\Models\Section::where('uuid', $reqSectionParam)->value('id');
+                        if ($reqSecId && $reqSecId !== $attenduSectionId) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'code'    => 'PROGRESSION_INVALIDE',
+                                'message' => 'La section demandée ne correspond pas à la progression pastorale calculée.',
+                            ], 422);
+                        }
+                    }
+
+                    if ($reqNiveauParam) {
+                        $reqNivId = is_numeric($reqNiveauParam) ? (int)$reqNiveauParam : \App\Models\Niveau::where('uuid', $reqNiveauParam)->value('id');
+                        if ($reqNivId && $reqNivId !== $attenduNiveauId) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'code'    => 'PROGRESSION_INVALIDE',
+                                'message' => 'Le niveau demandé ne correspond pas à la progression pastorale calculée selon la décision de fin d\'année.',
+                            ], 422);
+                        }
+                    }
+
+                    // Enforcer la section et le niveau calculés
+                    $validated['section_souhaite_id'] = $attenduSectionId;
+                    $validated['niveau_souhaite_id'] = $attenduNiveauId;
+                }
+            }
+        }
+
         // 3. Normalisation Section & Niveau
         $sectionParam = $validated['section_souhaite_id'] ?? $validated['section_id'] ?? null;
         if ($sectionParam) {
@@ -414,6 +483,16 @@ class PreinscriptionController extends Controller
             $nivParam = $validated['niveau_souhaite_id'] ?? $validated['niveau_id'];
             $nivId = is_numeric($nivParam) ? (int)$nivParam : Niveau::where('uuid', $nivParam)->value('id');
             if ($nivId) $validated['niveau_souhaite_id'] = $nivId;
+        }
+
+        if (isset($validated['annee_catechese_id'])) {
+            $anParam = $validated['annee_catechese_id'];
+            $anId = is_numeric($anParam) ? (int)$anParam : AnneeCatechese::where('uuid', $anParam)->value('id');
+            if ($anId) {
+                $validated['annee_catechese_id'] = $anId;
+            } else {
+                unset($validated['annee_catechese_id']);
+            }
         }
 
         if (isset($validated['type_demande'])) {

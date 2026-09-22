@@ -46,6 +46,29 @@ use App\Http\Controllers\Api\V1\ImpressionController;
 use App\Http\Controllers\Api\V1\ModeleDocumentController;
 use App\Http\Controllers\Api\V1\DocumentGenereController;
 use App\Http\Controllers\Api\V1\SacrementController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminProduitController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminFormuleController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminAbonnementController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminEcheanceController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminPaiementController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminFactureController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminParoisseController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminDashboardController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminOrganisationController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationProfileController;
+use App\Http\Controllers\Api\V1\Organisation\MembreController;
+use App\Http\Controllers\Api\V1\Organisation\ActiviteController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationUserController;
+use App\Http\Controllers\Api\V1\Organisation\CatheoPopulationController;
+use App\Http\Controllers\Api\V1\Organisation\CampagnePelerinageController;
+use App\Http\Controllers\Api\V1\Organisation\TarifPelerinageController;
+use App\Http\Controllers\Api\V1\Organisation\InscriptionPelerinageController;
+use App\Http\Controllers\Api\V1\Organisation\PaiementPelerinageController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationDashboardController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationStatistiqueController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationCaisseController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationRapportController;
+use App\Http\Controllers\Api\V1\Organisation\OrganisationExportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -67,6 +90,9 @@ Route::get('/paroisse-configuration', [CatecheseConfigurationController::class, 
 Route::get('/apparence-configuration', [ApparenceConfigurationController::class, 'show']);
 
 // Route publique de soumission et consultation de préinscription (Protégée anti-spam)
+Route::get('/public/campagnes/{uuid}', [CampagnePreinscriptionController::class, 'showPublic']);
+Route::get('/public/campagnes', [CampagnePreinscriptionController::class, 'showActivePublic']);
+Route::get('/campagnes-preinscriptions/public', [CampagnePreinscriptionController::class, 'showActivePublic']);
 Route::get('/public/campagnes/{uuid}', [CampagnePreinscriptionController::class, 'showPublic']);
 Route::get('/campagnes-preinscriptions/public/{uuid}', [CampagnePreinscriptionController::class, 'showPublic']);
 Route::get('/public/preinscriptions/check', [PreinscriptionController::class, 'checkDuplicate']);
@@ -562,4 +588,170 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('modeles-documents', ModeleDocumentController::class);
     Route::apiResource('documents-generes', DocumentGenereController::class)->except(['update']);
 });
+
+// ─────────────────────────────────────────────────────────────────
+// MODULE SUPER ADMIN (SaaS Multi-Produits & Gestion Plateforme)
+// ─────────────────────────────────────────────────────────────────
+Route::middleware(['auth:sanctum', 'super_admin'])->prefix('super-admin')->group(function () {
+    // Tableau de bord consolidé (KPIs)
+    Route::get('/dashboard', [SuperAdminDashboardController::class, 'index']);
+
+    // Gestion des Produits SaaS
+    Route::get('/produits', [SuperAdminProduitController::class, 'index']);
+    Route::post('/produits', [SuperAdminProduitController::class, 'store']);
+    Route::get('/produits/{produit}', [SuperAdminProduitController::class, 'show']);
+    Route::put('/produits/{produit}', [SuperAdminProduitController::class, 'update']);
+    Route::patch('/produits/{produit}', [SuperAdminProduitController::class, 'update']);
+    Route::patch('/produits/{produit}/toggle-status', [SuperAdminProduitController::class, 'toggleStatus']);
+    Route::delete('/produits/{produit}', [SuperAdminProduitController::class, 'destroy']);
+
+    // Gestion des Formules Tarifaires
+    Route::get('/formules', [SuperAdminFormuleController::class, 'index']);
+    Route::post('/formules', [SuperAdminFormuleController::class, 'store']);
+    Route::get('/formules/{formule}', [SuperAdminFormuleController::class, 'show']);
+    Route::put('/formules/{formule}', [SuperAdminFormuleController::class, 'update']);
+    Route::patch('/formules/{formule}', [SuperAdminFormuleController::class, 'update']);
+    Route::patch('/formules/{formule}/toggle-status', [SuperAdminFormuleController::class, 'toggleStatus']);
+    Route::delete('/formules/{formule}', [SuperAdminFormuleController::class, 'destroy']);
+
+    // Gestion des Abonnements par Paroisse
+    Route::get('/abonnements', [SuperAdminAbonnementController::class, 'index']);
+    Route::post('/abonnements', [SuperAdminAbonnementController::class, 'store']);
+    Route::get('/abonnements/{abonnement}', [SuperAdminAbonnementController::class, 'show']);
+    Route::patch('/abonnements/{abonnement}/statut', [SuperAdminAbonnementController::class, 'changerStatut']);
+    Route::post('/abonnements/{abonnement}/resilier', [SuperAdminAbonnementController::class, 'resilier']);
+
+    // Échéances de Facturation
+    Route::get('/echeances', [SuperAdminEcheanceController::class, 'index']);
+    Route::get('/echeances/{echeance}', [SuperAdminEcheanceController::class, 'show']);
+    Route::post('/echeances/{echeance}/generer-facture', [SuperAdminEcheanceController::class, 'genererFacture']);
+
+    // Paiements Plateforme (Abonnements)
+    Route::get('/paiements-abonnement', [SuperAdminPaiementController::class, 'index']);
+    Route::post('/paiements-abonnement', [SuperAdminPaiementController::class, 'store']);
+    Route::get('/paiements-abonnement/{paiement}', [SuperAdminPaiementController::class, 'show']);
+    Route::post('/paiements-abonnement/{paiement}/annuler', [SuperAdminPaiementController::class, 'annuler']);
+    Route::post('/paiements-abonnement/{paiement}/rembourser', [SuperAdminPaiementController::class, 'rembourser']);
+
+    // Factures d'Abonnement
+    Route::get('/factures', [SuperAdminFactureController::class, 'index']);
+    Route::get('/factures/{facture}', [SuperAdminFactureController::class, 'show']);
+
+    // Supervision des Paroisses
+    Route::get('/paroisses', [SuperAdminParoisseController::class, 'index']);
+    Route::get('/paroisses/{id}', [SuperAdminParoisseController::class, 'show']);
+
+    // Supervision des Organisations & Provisionnement du premier responsable
+    Route::get('/organisations', [SuperAdminOrganisationController::class, 'index']);
+    Route::get('/organisations/{organisation}', [SuperAdminOrganisationController::class, 'show']);
+    Route::post('/organisations/{organisation}/responsable', [SuperAdminOrganisationController::class, 'createResponsable']);
+});
+
+// ─────────────────────────────────────────────────────────────────
+// MODULE ORGANISATIONS (OPPE, OPPJ, OPPA)
+// ─────────────────────────────────────────────────────────────────
+Route::middleware(['auth:sanctum', 'organisation'])->prefix('organisation')->group(function () {
+    // Contexte & profil de l'organisation
+    Route::get('/context', [OrganisationProfileController::class, 'context']);
+    Route::get('/info', [OrganisationProfileController::class, 'context']);
+    Route::put('/info', [OrganisationProfileController::class, 'update']);
+
+    // Membres de l'organisation
+    Route::get('/membres', [MembreController::class, 'index']);
+    Route::post('/membres', [MembreController::class, 'store']);
+    Route::get('/membres/{membre}', [MembreController::class, 'show']);
+    Route::put('/membres/{membre}', [MembreController::class, 'update']);
+    Route::delete('/membres/{membre}', [MembreController::class, 'destroy']);
+
+    // Activités de l'organisation
+    Route::get('/activites', [ActiviteController::class, 'index']);
+    Route::post('/activites', [ActiviteController::class, 'store']);
+    Route::get('/activites/{activite}', [ActiviteController::class, 'show']);
+    Route::put('/activites/{activite}', [ActiviteController::class, 'update']);
+    Route::delete('/activites/{activite}', [ActiviteController::class, 'destroy']);
+
+    // Utilisateurs de l'organisation
+    Route::get('/users', [OrganisationUserController::class, 'index']);
+    Route::post('/users', [OrganisationUserController::class, 'store']);
+    Route::get('/users/{user}', [OrganisationUserController::class, 'show']);
+    Route::put('/users/{user}', [OrganisationUserController::class, 'update']);
+    Route::patch('/users/{user}/toggle-status', [OrganisationUserController::class, 'toggleStatus']);
+
+    // Passerelle Population CATHEO (filtrée par codes de section stricts et année courante)
+    Route::get('/catheo/population', [CatheoPopulationController::class, 'index']);
+
+    // ─────────────────────────────────────────────────────────────
+    // PÈLERINAGES ET CAMPAGNES (Étape 4)
+    // ─────────────────────────────────────────────────────────────
+    // Campagnes
+    Route::get('/pelerinages', [CampagnePelerinageController::class, 'index']);
+    Route::post('/pelerinages', [CampagnePelerinageController::class, 'store']);
+    Route::get('/pelerinages/{campagne}', [CampagnePelerinageController::class, 'show']);
+    Route::put('/pelerinages/{campagne}', [CampagnePelerinageController::class, 'update']);
+    Route::patch('/pelerinages/{campagne}', [CampagnePelerinageController::class, 'update']);
+    Route::delete('/pelerinages/{campagne}', [CampagnePelerinageController::class, 'destroy']);
+    Route::patch('/pelerinages/{campagne}/ouvrir', [CampagnePelerinageController::class, 'ouvrir']);
+    Route::patch('/pelerinages/{campagne}/cloturer', [CampagnePelerinageController::class, 'cloturer']);
+    Route::patch('/pelerinages/{campagne}/annuler', [CampagnePelerinageController::class, 'annuler']);
+    Route::get('/pelerinages/{campagne}/statistiques', [CampagnePelerinageController::class, 'statistiques']);
+
+    // Tarifs de campagne
+    Route::get('/pelerinages/{campagne}/tarifs', [TarifPelerinageController::class, 'index']);
+    Route::post('/pelerinages/{campagne}/tarifs', [TarifPelerinageController::class, 'store']);
+    Route::get('/pelerinages/{campagne}/tarifs/{tarif}', [TarifPelerinageController::class, 'show']);
+    Route::put('/pelerinages/{campagne}/tarifs/{tarif}', [TarifPelerinageController::class, 'update']);
+    Route::patch('/pelerinages/{campagne}/tarifs/{tarif}', [TarifPelerinageController::class, 'update']);
+    Route::delete('/pelerinages/{campagne}/tarifs/{tarif}', [TarifPelerinageController::class, 'destroy']);
+
+    // Inscriptions
+    Route::get('/pelerinages/{campagne}/inscriptions', [InscriptionPelerinageController::class, 'index']);
+    Route::post('/pelerinages/{campagne}/inscriptions', [InscriptionPelerinageController::class, 'store']);
+    Route::get('/pelerinages/{campagne}/inscriptions/{inscription}', [InscriptionPelerinageController::class, 'show']);
+    Route::put('/pelerinages/{campagne}/inscriptions/{inscription}', [InscriptionPelerinageController::class, 'update']);
+    Route::patch('/pelerinages/{campagne}/inscriptions/{inscription}', [InscriptionPelerinageController::class, 'update']);
+    Route::delete('/pelerinages/{campagne}/inscriptions/{inscription}', [InscriptionPelerinageController::class, 'destroy']);
+    Route::patch('/pelerinages/{campagne}/inscriptions/{inscription}/annuler', [InscriptionPelerinageController::class, 'annuler']);
+
+    // Génération et participants CATHEO
+    Route::post('/pelerinages/{campagne}/generer-inscriptions-catheo', [InscriptionPelerinageController::class, 'genererInscriptionsCatheo']);
+    Route::get('/pelerinages/{campagne}/participants-catheo', [InscriptionPelerinageController::class, 'participantsCatheo']);
+
+    // Participation & pointage
+    Route::patch('/pelerinages/{campagne}/inscriptions/{inscription}/participation', [InscriptionPelerinageController::class, 'updateParticipation']);
+    Route::post('/pelerinages/{campagne}/participation/batch', [InscriptionPelerinageController::class, 'batchParticipation']);
+
+    // Paiements pèlerinage
+    Route::get('/pelerinages/{campagne}/paiements', [PaiementPelerinageController::class, 'index']);
+    Route::get('/pelerinages/{campagne}/inscriptions/{inscription}/paiements', [PaiementPelerinageController::class, 'indexForInscription']);
+    Route::post('/pelerinages/{campagne}/inscriptions/{inscription}/paiements', [PaiementPelerinageController::class, 'store']);
+    Route::post('/pelerinages/{campagne}/paiements/{paiement}/annuler', [PaiementPelerinageController::class, 'annuler']);
+
+    // ─────────────────────────────────────────────────────────────
+    // REPORTING, STATISTIQUES & EXPORTS (Étape 5)
+    // ─────────────────────────────────────────────────────────────
+    // Dashboard général
+    Route::get('/dashboard', [OrganisationDashboardController::class, 'index']);
+
+    // Statistiques spécialisées
+    Route::get('/statistiques/membres', [OrganisationStatistiqueController::class, 'membres']);
+    Route::get('/statistiques/activites', [OrganisationStatistiqueController::class, 'activites']);
+    Route::get('/statistiques/pelerinages', [OrganisationStatistiqueController::class, 'pelerinages']);
+    Route::get('/statistiques/finances', [OrganisationStatistiqueController::class, 'finances']);
+
+    // État de caisse
+    Route::get('/caisse', [OrganisationCaisseController::class, 'index']);
+
+    // Rapport annuel
+    Route::get('/rapports/annuel', [OrganisationRapportController::class, 'annuel']);
+
+    // Exports CSV / Excel
+    Route::get('/exports/membres', [OrganisationExportController::class, 'membres']);
+    Route::get('/exports/activites', [OrganisationExportController::class, 'activites']);
+    Route::get('/exports/pelerinages/{campagne}/participants', [OrganisationExportController::class, 'participantsPelerinage']);
+    Route::get('/exports/pelerinages/{campagne}/paiements', [OrganisationExportController::class, 'paiementsPelerinage']);
+    Route::get('/exports/operations', [OrganisationExportController::class, 'operations']);
+    Route::get('/exports/caisse', [OrganisationExportController::class, 'caisse']);
+});
+
+
 

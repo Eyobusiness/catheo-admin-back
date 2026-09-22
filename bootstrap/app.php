@@ -22,8 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         // Alias pour le contrôle des permissions CRUD et acteurs spécifiques
         $middleware->alias([
-            'permission' => \App\Http\Middleware\CheckPermission::class,
-            'animateur'  => \App\Http\Middleware\EnsureAnimateur::class,
+            'permission'   => \App\Http\Middleware\CheckPermission::class,
+            'animateur'    => \App\Http\Middleware\EnsureAnimateur::class,
+            'super_admin'  => \App\Http\Middleware\EnsureSuperAdmin::class,
+            'organisation' => \App\Http\Middleware\EnsureOrganisationContext::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

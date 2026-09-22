@@ -93,20 +93,33 @@ class ProfilController extends Controller
         $user = $request->user() ?? auth('sanctum')->user();
         $paroisseId = $user?->paroisse_configuration_id 
             ?? $request->input('paroisse_configuration_id')
-            ?? $request->header('X-Paroisse-Id');
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
-        if (!$paroisseId) {
-            return response()->json([
-                'status' => 'success',
-                'meta' => [
-                    'total_elements' => 0,
-                ],
-                'data' => [],
-            ]);
+        $isSuperAdmin = $user && $user->isSuperAdmin();
+
+        $query = Profil::withCount('users');
+
+        if ($paroisseId) {
+            $query->where(function ($q) use ($paroisseId) {
+                $q->whereNull('paroisse_configuration_id')
+                  ->orWhere('paroisse_configuration_id', (int) $paroisseId);
+            });
+        } else {
+            // Utilisateur super admin ou appel global : voir les profils système et globaux
+            $query->where(function ($q) {
+                $q->whereNull('paroisse_configuration_id')
+                  ->orWhere('is_system', true);
+            });
         }
 
-        $query = Profil::withCount('users')
-            ->where('paroisse_configuration_id', (int) $paroisseId);
+        // Pour les utilisateurs paroissiaux standards (non super-admin), exclure le rôle SUPER_ADMIN et les rôles organisationnels
+        if (!$isSuperAdmin) {
+            $query->where('code', '!=', 'SUPER_ADMIN')
+                  ->where('code', 'not like', 'RESPONSABLE_OPP%')
+                  ->where('code', 'not like', 'UTILISATEUR_OPP%');
+        }
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -121,7 +134,7 @@ class ProfilController extends Controller
             $query->where('statut', strtolower($request->input('statut')));
         }
 
-        $profils = $query->get();
+        $profils = $query->orderBy('is_system', 'desc')->orderBy('nom', 'asc')->get();
 
         return response()->json([
             'status' => 'success',

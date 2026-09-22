@@ -72,48 +72,109 @@ class CampagnePreinscriptionController extends Controller
     /**
      * Consultation publique d'une campagne de préinscription (Pour le formulaire web des parents).
      */
+    public function showActivePublic(): JsonResponse
+    {
+        return $this->showPublic('active');
+    }
+
+    /**
+     * Consultation publique d'une campagne de préinscription (Pour le formulaire web des parents).
+     */
     public function showPublic(string $uuid): JsonResponse
     {
         $campagne = CampagnePreinscription::where('uuid', $uuid)
             ->orWhere('id', $uuid)
-            ->firstOrFail();
+            ->first();
 
-        if ($campagne->statut !== 'ouverte') {
+        if (!$campagne && ($uuid === 'active' || $uuid === 'current' || $uuid === 'default' || empty($uuid))) {
+            $campagne = CampagnePreinscription::where('statut', 'ouverte')->latest('date_debut')->first()
+                ?? CampagnePreinscription::latest('id')->first();
+        }
+
+        if (!$campagne) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Cette campagne de préinscription est actuellement fermée ou suspendue.',
-            ], 422);
+                'message' => 'Campagne de préinscription introuvable.',
+            ], 404);
         }
 
         $campagne->load(['anneeCatechese', 'paroisse']);
+        $paroisseId = (int) $campagne->paroisse_configuration_id;
 
-        // Récupérer les sections et niveaux autorisés pour le formulaire parent
-        $sectionsQuery = Section::where('paroisse_configuration_id', $campagne->paroisse_configuration_id)
-            ->where('statut', 'actif')
+        // Configuration complète de la paroisse
+        $paroisseConfig = \App\Models\CatecheseConfiguration::find($paroisseId);
+
+        // Sections et niveaux autorisés pour le formulaire parent
+        $allParoisseSections = \App\Models\Section::where('paroisse_configuration_id', $paroisseId)
+            ->where(function($q) {
+                $q->where('statut', 'actif')->orWhere('statut', 'Active')->orWhereNull('statut');
+            })
             ->with(['niveaux' => function ($q) {
-                $q->where('statut', 'actif')->orderBy('ordre_affichage');
-            }]);
+                $q->where(function($sq) {
+                    $sq->where('statut', 'actif')->orWhere('statut', 'Active')->orWhereNull('statut');
+                })->orderBy('ordre_affichage');
+            }])
+            ->orderBy('ordre_affichage')
+            ->get();
 
-        if (!empty($campagne->sections_autorisees)) {
-            $sectionsQuery->where(function ($q) use ($campagne) {
-                $q->whereIn('uuid', $campagne->sections_autorisees)
-                  ->orWhereIn('nom', $campagne->sections_autorisees);
+        if (!empty($campagne->sections_autorisees) && is_array($campagne->sections_autorisees) && count($campagne->sections_autorisees) > 0) {
+            $authList = array_map(function($v) { return strtolower(trim((string)$v)); }, $campagne->sections_autorisees);
+            
+            $filteredSections = $allParoisseSections->filter(function($sec) use ($authList) {
+                $nom = strtolower(trim($sec->nom));
+                $code = strtolower(trim($sec->code ?? ''));
+                $uuid = strtolower(trim($sec->uuid ?? ''));
+                $id = (string) $sec->id;
+
+                if (in_array($nom, $authList) || in_array($code, $authList) || in_array($uuid, $authList) || in_array($id, $authList)) {
+                    return true;
+                }
+
+                foreach ($authList as $item) {
+                    if (str_contains($nom, 'primair') && str_contains($item, 'primair')) return true;
+                    if ((str_contains($nom, 'colleg') || str_contains($nom, 'collèg')) && (str_contains($item, 'colleg') || str_contains($item, 'collèg'))) return true;
+                    if (str_contains($nom, 'jeun') && str_contains($item, 'jeun')) return true;
+                    if (str_contains($nom, 'adult') && str_contains($item, 'adult')) return true;
+                }
+                return false;
             });
+
+            $sections = $filteredSections->isNotEmpty() ? $filteredSections->values() : $allParoisseSections;
+        } else {
+            $sections = $allParoisseSections;
         }
 
-        $sections = $sectionsQuery->orderBy('ordre_affichage')->get();
+        $niveaux = $sections->pluck('niveaux')->flatten();
+
+        $cebs = \App\Models\Ceb::where('paroisse_configuration_id', $paroisseId)
+            ->where(function($q) {
+                $q->where('statut', 'actif')->orWhere('statut', 'Active')->orWhereNull('statut');
+            })
+            ->orderBy('nom')
+            ->get();
+
+        $mouvements = \App\Models\Mouvement::where('paroisse_configuration_id', $paroisseId)
+            ->where(function($q) {
+                $q->where('statut', 'actif')->orWhere('statut', 'Active')->orWhereNull('statut');
+            })
+            ->orderBy('nom')
+            ->get();
 
         return response()->json([
             'status' => 'success',
             'data'   => [
-                'campagne' => new CampagnePreinscriptionResource($campagne),
-                'paroisse' => [
-                    'nom'      => $campagne->paroisse?->nom,
-                    'commune'  => $campagne->paroisse?->commune,
-                    'ville'    => $campagne->paroisse?->ville,
-                    'logo_url' => $campagne->paroisse?->logo_url,
+                'campagne'   => new \App\Http\Resources\Api\V1\CampagnePreinscriptionResource($campagne),
+                'paroisse'   => $paroisseConfig ? new \App\Http\Resources\Api\V1\CatecheseConfigurationResource($paroisseConfig) : [
+                    'nom_paroisse' => $campagne->paroisse?->nom,
+                    'nom'          => $campagne->paroisse?->nom,
+                    'commune'      => $campagne->paroisse?->commune,
+                    'ville'        => $campagne->paroisse?->ville,
+                    'logo_url'     => $campagne->paroisse?->logo_url,
                 ],
-                'sections' => $sections,
+                'sections'   => \App\Http\Resources\Api\V1\SectionResource::collection($sections),
+                'niveaux'    => \App\Http\Resources\Api\V1\NiveauResource::collection($niveaux),
+                'cebs'       => \App\Http\Resources\Api\V1\CebResource::collection($cebs),
+                'mouvements' => \App\Http\Resources\Api\V1\MouvementResource::collection($mouvements),
             ],
         ]);
     }

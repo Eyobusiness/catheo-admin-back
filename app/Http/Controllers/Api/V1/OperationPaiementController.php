@@ -49,7 +49,12 @@ class OperationPaiementController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $query = OperationPaiement::with(['catechumene', 'tarif', 'anneeCatechese']);
 
@@ -120,7 +125,12 @@ class OperationPaiementController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $validated = $request->validate([
             'annee_catechese_id' => ['nullable', 'string'],
@@ -128,6 +138,7 @@ class OperationPaiementController extends Controller
             'tarif_id'           => ['nullable', 'string'],
             'libelle'            => ['required', 'string', 'max:255'],
             'montant'            => ['required', 'numeric', 'min:0'],
+            'remise'             => ['nullable', 'numeric', 'min:0'],
             'echeance'           => ['nullable', 'date'],
         ]);
 
@@ -158,6 +169,7 @@ class OperationPaiementController extends Controller
             'libelle'                   => $validated['libelle'],
             'montant'                   => $validated['montant'],
             'montant_paye'              => 0,
+            'remise'                    => $validated['remise'] ?? 0,
             'echeance'                  => $validated['echeance'] ?? null,
             'statut'                    => 'en_attente',
         ]);
@@ -176,7 +188,12 @@ class OperationPaiementController extends Controller
      */
     public function genererParTarif(Request $request, mixed $tarif = null): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $tarifIdOrUuid = $tarif ?? $request->input('tarif_id');
         if (!$tarifIdOrUuid) {
@@ -191,19 +208,20 @@ class OperationPaiementController extends Controller
         $anneeId = $tarifObj->annee_catechese_id ?? AnneeCatechese::resolveAnnee($request, $paroisseId)?->id;
 
         // Trouver les niveaux concernés par ce tarif
-        $niveauIds = [];
-        if ($tarifObj->niveau_id) {
+        $niveauIds = $tarifObj->niveaux()->pluck('niveaux.id')->toArray();
+        if ($tarifObj->niveau_id && !in_array($tarifObj->niveau_id, $niveauIds)) {
             $niveauIds[] = $tarifObj->niveau_id;
         }
-        $attachedNiveaux = $tarifObj->niveaux()->pluck('niveaux.id')->toArray();
-        $niveauIds = array_unique(array_merge($niveauIds, $attachedNiveaux));
 
-        // Récupérer les inscriptions cibles
-        $inscriptionsQuery = InscriptionAnnuelle::with('catechumene')
-            ->where('annee_catechese_id', $anneeId);
+        $inscriptionsQuery = InscriptionAnnuelle::with(['catechumene'])
+            ->where('paroisse_configuration_id', $paroisseId)
+            ->where(function ($q) {
+                $q->whereIn('statut_inscription', ['valide', 'inscrit'])
+                  ->orWhereNull('statut_inscription');
+            });
 
-        if ($paroisseId) {
-            $inscriptionsQuery->where('paroisse_configuration_id', $paroisseId);
+        if ($anneeId) {
+            $inscriptionsQuery->where('annee_catechese_id', $anneeId);
         }
 
         if (!empty($niveauIds)) {
@@ -214,25 +232,14 @@ class OperationPaiementController extends Controller
         $generatedCount = 0;
 
         foreach ($inscriptions as $ins) {
-            if (!$ins->catechumene_id) {
-                continue;
-            }
-
-            // Vérifier si une opération existe déjà pour ce catéchumène et ce tarif pour l'année
             $existingOp = OperationPaiement::where('annee_catechese_id', $anneeId)
                 ->where('catechumene_id', $ins->catechumene_id)
-                ->where(function ($q) use ($tarifObj) {
-                    $q->where('tarif_id', $tarifObj->id)
-                      ->orWhereNull('tarif_id');
-                })
+                ->where('tarif_id', $tarifObj->id)
                 ->where('statut', 'en_attente')
                 ->first();
 
             if ($existingOp) {
-                // Mettre à jour avec le tarif officiel exact
                 $existingOp->update([
-                    'tarif_id' => $tarifObj->id,
-                    'libelle'  => "{$tarifObj->intitule} - {$ins->catechumene->nom_complet}",
                     'montant'  => (float) $tarifObj->montant,
                     'echeance' => $tarifObj->periode_fin?->toDateString() ?? $existingOp->echeance,
                 ]);
@@ -253,9 +260,10 @@ class OperationPaiementController extends Controller
                         'catechumene_id'            => $ins->catechumene_id,
                         'tarif_id'                  => $tarifObj->id,
                         'reference'                 => $reference,
-                        'libelle'                   => "{$tarifObj->intitule} - {$ins->catechumene->nom_complet}",
+                        'libelle'                   => "{$tarifObj->intitule} - " . ($ins->catechumene?->nom_complet ?? 'Catéchumène'),
                         'montant'                   => (float) $tarifObj->montant,
                         'montant_paye'              => 0,
+                        'remise'                    => 0,
                         'echeance'                  => $tarifObj->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
                         'statut'                    => 'en_attente',
                     ]);
@@ -277,7 +285,12 @@ class OperationPaiementController extends Controller
      */
     public function genererParInscription(Request $request, mixed $inscription): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
 
         $ins = is_numeric($inscription)
             ? InscriptionAnnuelle::with(['catechumene', 'niveau'])->find($inscription)
@@ -315,6 +328,7 @@ class OperationPaiementController extends Controller
                 'libelle'      => "{$tarif->intitule} - " . ($ins->catechumene?->nom_complet ?? 'Catéchumène') . " (" . ($ins->niveau?->nom ?? 'Catéchèse') . ")",
                 'montant'      => (float) $tarif->montant,
                 'montant_paye' => 0,
+                'remise'       => 0,
                 'echeance'     => $tarif->periode_fin?->toDateString() ?? now()->addMonths(1)->toDateString(),
             ]
         );
@@ -332,7 +346,12 @@ class OperationPaiementController extends Controller
      */
     public function payer(Request $request, mixed $operation): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id;
+        $user = $request->user() ?? auth('sanctum')->user();
+        $paroisseId = $user?->paroisse_configuration_id 
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id');
         $op = $this->resolveOperation($operation);
 
         $this->authorizeTenant($paroisseId, $op->paroisse_configuration_id);
@@ -347,6 +366,7 @@ class OperationPaiementController extends Controller
         $validated = $request->validate([
             'mode_paiement'         => ['required', 'string'],
             'reference_transaction' => ['nullable', 'string', 'max:255'],
+            'remise'                => ['nullable', 'numeric', 'min:0'],
             'date_paiement'         => ['nullable', 'date'],
             'notes'                 => ['nullable', 'string'],
         ]);
@@ -354,8 +374,11 @@ class OperationPaiementController extends Controller
         $datePaiement = $validated['date_paiement'] ?? now()->toDateString();
         $modePaiement = $validated['mode_paiement'];
         $montantTotal = (float) $op->montant;
+        $remise = isset($validated['remise']) ? (float) $validated['remise'] : 0.0;
+        $remise = max(0, min($remise, $montantTotal));
+        $montantNet = max(0, $montantTotal - $remise);
 
-        $paiement = DB::transaction(function () use ($paroisseId, $op, $datePaiement, $modePaiement, $montantTotal, $validated) {
+        $paiement = DB::transaction(function () use ($paroisseId, $op, $datePaiement, $modePaiement, $montantTotal, $remise, $montantNet, $validated) {
             // 1. Générer le numéro de reçu officiel (ex: REC26-124002-0001)
             $numeroRecu = app(\App\Services\ReceiptNumberGeneratorService::class)->generate($op->paroisse_configuration_id, $datePaiement);
 
@@ -373,6 +396,7 @@ class OperationPaiementController extends Controller
                 'catechumene_id'            => $op->catechumene_id,
                 'numero_recu'               => $numeroRecu,
                 'montant_total'             => $montantTotal,
+                'remise'                    => $remise,
                 'mode_paiement'             => $modePaiement,
                 'reference_transaction'     => $validated['reference_transaction'] ?? null,
                 'date_paiement'             => $datePaiement,
@@ -394,7 +418,8 @@ class OperationPaiementController extends Controller
             // 4. Mettre à jour l'opération de paiement
             $op->update([
                 'statut'       => 'paye',
-                'montant_paye' => $montantTotal,
+                'montant_paye' => $montantNet,
+                'remise'       => $remise,
             ]);
 
             // 5. Si c'est des frais d'inscription, valider l'inscription
@@ -402,7 +427,7 @@ class OperationPaiementController extends Controller
                 $inscription->update(['frais_inscription_payes' => true]);
             }
 
-            // 6. Écriture dans le journal de caisse paroissiale
+            // 6. Écriture dans le journal de caisse paroissiale avec le montant net encaissé
             $catechumene = $op->catechumene;
             $nomBeneficiaire = $catechumene ? trim("{$catechumene->nom} {$catechumene->prenoms}") : 'Catéchumène';
 
@@ -411,9 +436,9 @@ class OperationPaiementController extends Controller
                 'annee_catechese_id'        => $op->annee_catechese_id,
                 'type_mouvement'            => 'entree',
                 'categorie'                 => ($op->tarif?->type_tarif ?? 'recette_autre'),
-                'montant'                   => $montantTotal,
+                'montant'                   => $montantNet,
                 'reference_document'        => $numeroRecu,
-                'libelle'                   => "Encaissement Reçu N° {$numeroRecu} - {$nomBeneficiaire} ({$op->libelle})",
+                'libelle'                   => "Encaissement Reçu N° {$numeroRecu}" . ($remise > 0 ? " (Remise: {$remise} F)" : "") . " - {$nomBeneficiaire} ({$op->libelle})",
                 'date_mouvement'            => $datePaiement,
             ]);
 
@@ -455,6 +480,7 @@ class OperationPaiementController extends Controller
         $validated = $request->validate([
             'libelle'  => ['sometimes', 'string', 'max:255'],
             'montant'  => ['sometimes', 'numeric', 'min:0'],
+            'remise'   => ['nullable', 'numeric', 'min:0'],
             'echeance' => ['nullable', 'date'],
             'statut'   => ['sometimes', 'string', 'in:en_attente,partiellement_paye,paye,annule'],
         ]);

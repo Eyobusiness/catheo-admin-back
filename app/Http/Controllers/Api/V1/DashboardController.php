@@ -47,7 +47,14 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        if ($user->user_type === 'super_admin' || $user->profil?->code === 'SUPER_ADMIN' || !$user->paroisse_configuration_id) {
+        if ($user->user_type === 'super_admin' || $user->profil?->code === 'SUPER_ADMIN') {
+            $paroisseId = $request->input('paroisse_configuration_id')
+                ?? $request->input('paroisse_id')
+                ?? $request->header('X-Paroisse-Id')
+                ?? $request->header('X-Paroisse-Configuration-Id');
+            if ($paroisseId) {
+                return $this->adminDashboard($request);
+            }
             return $this->superAdminDashboard($request);
         }
 
@@ -67,7 +74,20 @@ class DashboardController extends Controller
      */
     public function adminDashboard(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? 3;
+        $paroisseId = $request->user()?->paroisse_configuration_id
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id')
+            ?? \App\Models\CatecheseConfiguration::first()?->id;
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Paroisse non identifiée.',
+            ], 422);
+        }
+
         $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
 
         $dashboardData = $this->dashboardService->getAdminDashboardData($paroisseId, $annee);
@@ -463,7 +483,20 @@ class DashboardController extends Controller
      */
     public function finances(Request $request): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? 3;
+        $paroisseId = $request->user()?->paroisse_configuration_id
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id')
+            ?? \App\Models\CatecheseConfiguration::first()?->id;
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Paroisse non identifiée.',
+            ], 422);
+        }
+
         $annee = AnneeCatechese::resolveAnnee($request, $paroisseId);
 
         $financesData = $this->dashboardService->getFinancesDashboardData($paroisseId, $annee);
@@ -479,7 +512,19 @@ class DashboardController extends Controller
      */
     public function bilanAnnuel(Request $request, ?string $anneeCatecheseId = null): JsonResponse
     {
-        $paroisseId = $request->user()->paroisse_configuration_id ?? \App\Models\CatecheseConfiguration::first()?->id ?? 3;
+        $paroisseId = $request->user()?->paroisse_configuration_id
+            ?? $request->input('paroisse_configuration_id')
+            ?? $request->input('paroisse_id')
+            ?? $request->header('X-Paroisse-Id')
+            ?? $request->header('X-Paroisse-Configuration-Id')
+            ?? \App\Models\CatecheseConfiguration::first()?->id;
+
+        if (!$paroisseId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Paroisse non identifiée.',
+            ], 422);
+        }
 
         // Résolution de l'année demandée via paramètre d'URL, query param ou en-tête
         $anneeParam = $anneeCatecheseId ?? $request->query('annee_catechese_id') ?? $request->header('X-Annee-Id');
