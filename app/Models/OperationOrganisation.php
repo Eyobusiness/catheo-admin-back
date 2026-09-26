@@ -73,6 +73,6 @@ class OperationOrganisation extends Model
 
     public function operateur(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by', 'uuid');
+        return $this->belongsTo(User::class, 'created_by', 'id');
     }
 }

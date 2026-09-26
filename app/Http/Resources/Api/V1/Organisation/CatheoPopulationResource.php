@@ -12,12 +12,14 @@ class CatheoPopulationResource extends JsonResource
         $cat = $this->catechumene;
 
         return [
-            'inscription_id'    => $this->uuid ?? $this->id,
+            'inscription_id'    => $this->id,
+            'inscription_uuid'  => $this->uuid,
             'code_inscription'  => $this->code_inscription,
             'date_inscription'  => $this->date_inscription?->toDateString(),
             'statut_inscription'=> $this->statut_inscription,
             'catechumene'       => $cat ? [
-                'id'              => $cat->uuid ?? $cat->id,
+                'id'              => $cat->id,
+                'uuid'            => $cat->uuid,
                 'matricule'       => $cat->matricule,
                 'nom'             => $cat->nom,
                 'prenoms'         => $cat->prenoms,

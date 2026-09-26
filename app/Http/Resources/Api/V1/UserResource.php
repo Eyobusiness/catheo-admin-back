@@ -10,6 +10,7 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $paroisse = $this->relationLoaded('paroisse') ? $this->paroisse : ($this->relationLoaded('catechese') ? $this->catechese : null);
+        $organisation = $this->relationLoaded('organisation') ? $this->organisation : ($this->organisation_id ? $this->organisation : null);
         $profil = $this->relationLoaded('profil') ? $this->profil : null;
         $animateur = $this->relationLoaded('animateur') ? $this->animateur : null;
         $catechumene = $this->relationLoaded('catechumene') ? $this->catechumene : null;
@@ -19,6 +20,16 @@ class UserResource extends JsonResource
             'uuid'                      => $this->uuid,
             'paroisse_configuration_id' => $this->paroisse_configuration_id,
             'paroisse_id'               => $this->paroisse_configuration_id,
+            'organisation_id'           => $this->organisation_id ? ($organisation?->uuid ?? (string) $this->organisation_id) : null,
+            'organisation_id_interne'   => $this->organisation_id,
+            'organisation'              => $organisation ? [
+                'id'                => $organisation->uuid ?? $organisation->id,
+                'uuid'              => $organisation->uuid,
+                'type_organisation' => $organisation->type_organisation,
+                'code'              => $organisation->code,
+                'nom'               => $organisation->nom,
+                'statut'            => $organisation->statut,
+            ] : null,
             'name'                      => $this->name,
             'nom'                       => $this->nom,
             'prenoms'                   => $this->prenoms,

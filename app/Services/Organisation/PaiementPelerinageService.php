@@ -104,6 +104,11 @@ class PaiementPelerinageService
      */
     public function create(InscriptionPelerinage $inscription, array $data, int|string|null $userId = null): array
     {
+        if ($userId !== null && !is_numeric($userId)) {
+            $userId = \App\Models\User::where('uuid', $userId)->value('id');
+        }
+        $userId = $userId ? (int) $userId : (auth()->id() ?? null);
+
         // 1. Contrôles préalables sur l'inscription
         if ($inscription->statut_inscription === InscriptionPelerinage::STATUT_ANNULEE) {
             throw new UnprocessableEntityHttpException("Impossible d'enregistrer un paiement pour une inscription annulée.");
@@ -178,6 +183,11 @@ class PaiementPelerinageService
      */
     public function annuler(PaiementPelerinage $paiement, ?string $motif = null, int|string|null $userId = null): array
     {
+        if ($userId !== null && !is_numeric($userId)) {
+            $userId = \App\Models\User::where('uuid', $userId)->value('id');
+        }
+        $userId = $userId ? (int) $userId : (auth()->id() ?? null);
+
         if ($paiement->statut === PaiementPelerinage::STATUT_ANNULE) {
             throw new UnprocessableEntityHttpException("Ce paiement est déjà annulé.");
         }

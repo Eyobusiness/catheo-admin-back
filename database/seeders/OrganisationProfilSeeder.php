@@ -13,9 +13,9 @@ class OrganisationProfilSeeder extends Seeder
     public function run(): void
     {
         $types = [
-            'OPPE' => 'Organisation Pastorale des Petits Enfants',
-            'OPPJ' => 'Organisation Pastorale des Jeunes',
-            'OPPA' => 'Organisation Pastorale des Adultes',
+            'OPPE' => 'Office Paroissial de la Pastorale des Enfants',
+            'OPPJ' => 'Office Paroissial de la Pastorale des Jeunes',
+            'OPPA' => 'Office Paroissial de la Pastorale des Adultes',
         ];
 
         foreach ($types as $type => $label) {

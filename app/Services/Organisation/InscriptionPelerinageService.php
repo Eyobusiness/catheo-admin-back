@@ -131,7 +131,7 @@ class InscriptionPelerinageService
             $catechumeneId = $data['catechumene_id'] ?? null;
             if ($catechumeneId) {
                 $organisation = $lockedCampagne->organisation;
-                $catechumene = Catechumene::where('id', $catechumeneId)
+                $catechumene = Catechumene::where(is_numeric($catechumeneId) ? 'id' : 'uuid', $catechumeneId)
                     ->where('paroisse_configuration_id', $organisation->paroisse_configuration_id)
                     ->first();
 
@@ -287,7 +287,7 @@ class InscriptionPelerinageService
             ->where('paroisse_configuration_id', $paroisseId)
             ->where('annee_catechese_id', $anneeCourante->id)
             ->whereHas('section', function ($q) use ($targetCodes) {
-                $q->whereIn('code', $targetCodes);
+                $q->where(function ($sub) use ($targetCodes) { $sub->whereIn('code', $targetCodes)->orWhere('code', 'like', 'SEC-ENF%')->orWhere('nom', 'like', '%primaire%')->orWhere('nom', 'like', '%collège%'); });
             });
 
         if (!empty($options['niveau_id'])) {

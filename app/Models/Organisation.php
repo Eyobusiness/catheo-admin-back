@@ -29,6 +29,7 @@ class Organisation extends Model
 
     protected $fillable = [
         'uuid',
+        'mode',
         'paroisse_configuration_id',
         'produit_id',
         'type_organisation',
@@ -47,10 +48,44 @@ class Organisation extends Model
         'date_desactivation',
     ];
 
+    public function isIndependant(): bool
+    {
+        return $this->mode === 'independant' || empty($this->paroisse_configuration_id);
+    }
+
+    public function isLiee(): bool
+    {
+        return !$this->isIndependant();
+    }
+
     protected $casts = [
         'date_activation'   => 'date',
         'date_desactivation' => 'date',
     ];
+
+    protected $appends = [
+        'logo_url',
+    ];
+
+    /**
+     * URL publique du logo de l'organisation.
+     */
+    public function getLogoUrlAttribute(): ?string
+    {
+        if (empty($this->logo_path)) {
+            return null;
+        }
+
+        if (str_starts_with($this->logo_path, 'http://') || str_starts_with($this->logo_path, 'https://')) {
+            return $this->logo_path;
+        }
+
+        if (str_contains($this->logo_path, '/')) {
+            return asset('storage/' . ltrim($this->logo_path, '/'));
+        }
+
+        return asset('storage/organisations/logos/' . $this->logo_path);
+    }
 
     protected static function booted(): void
     {
@@ -62,16 +97,25 @@ class Organisation extends Model
                 throw new InvalidArgumentException("Type d'organisation invalide [{$type}]. Les types autorisés sont : " . implode(', ', self::TYPES));
             }
 
-            // Vérification applicative d'unicité active par paroisse (protection SoftDeletes)
-            $existingQuery = static::where('paroisse_configuration_id', $organisation->paroisse_configuration_id)
-                ->where('type_organisation', $type);
-
-            if ($organisation->exists) {
-                $existingQuery->where('id', '!=', $organisation->id);
+            // Déterminer le mode : 'independant' si pas de paroisse liée
+            if (empty($organisation->paroisse_configuration_id)) {
+                $organisation->mode = 'independant';
+            } else {
+                $organisation->mode = $organisation->mode ?? 'liee';
             }
 
-            if ($existingQuery->exists()) {
-                throw new InvalidArgumentException("Une organisation active de type [{$type}] existe déjà pour cette paroisse.");
+            // Vérification applicative d'unicité active par paroisse (seulement pour organisation liée à une paroisse)
+            if (!empty($organisation->paroisse_configuration_id)) {
+                $existingQuery = static::where('paroisse_configuration_id', $organisation->paroisse_configuration_id)
+                    ->where('type_organisation', $type);
+
+                if ($organisation->exists) {
+                    $existingQuery->where('id', '!=', $organisation->id);
+                }
+
+                if ($existingQuery->exists()) {
+                    throw new InvalidArgumentException("Une organisation active de type [{$type}] existe déjà pour cette paroisse.");
+                }
             }
         });
     }
@@ -141,6 +185,22 @@ class Organisation extends Model
     public function operations(): HasMany
     {
         return $this->hasMany(OperationOrganisation::class, 'organisation_id');
+    }
+
+    /**
+     * Abonnements souscrits pour cette organisation.
+     */
+    public function abonnements(): HasMany
+    {
+        return $this->hasMany(Abonnement::class, 'organisation_id');
+    }
+
+    /**
+     * Dernier abonnement actif de l'organisation.
+     */
+    public function abonnementActif()
+    {
+        return $this->hasOne(Abonnement::class, 'organisation_id')->where('statut', Abonnement::STATUT_ACTIF)->latestOfMany();
     }
 
     /**

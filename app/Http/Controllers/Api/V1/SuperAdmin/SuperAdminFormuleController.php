@@ -22,7 +22,12 @@ class SuperAdminFormuleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $filters = $request->only(['produit_id', 'statut', 'est_gratuite', 'all']);
+        $filters = $request->only(['statut', 'est_gratuite', 'all']);
+        $prodInput = $request->input('produit') ?? $request->input('produit_id') ?? $request->input('produit_code');
+        if (!empty($prodInput)) {
+            $filters['produit_id'] = $prodInput;
+        }
+
         $perPage = (int) $request->input('per_page', 15);
 
         $result = $this->formuleService->list($filters, $perPage);

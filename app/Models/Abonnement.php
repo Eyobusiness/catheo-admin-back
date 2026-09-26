@@ -33,6 +33,7 @@ class Abonnement extends Model
     protected $fillable = [
         'uuid',
         'paroisse_configuration_id',
+        'organisation_id',
         'formule_id',
         'reference',
         'date_debut',
@@ -65,6 +66,11 @@ class Abonnement extends Model
     public function paroisse(): BelongsTo
     {
         return $this->belongsTo(CatecheseConfiguration::class, 'paroisse_configuration_id');
+    }
+
+    public function organisation(): BelongsTo
+    {
+        return $this->belongsTo(Organisation::class, 'organisation_id');
     }
 
     public function formule(): BelongsTo

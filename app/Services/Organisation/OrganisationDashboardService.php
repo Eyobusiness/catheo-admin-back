@@ -87,7 +87,7 @@ class OrganisationDashboardService
 
     protected function getPelerinagesMetrics(Organisation $organisation): array
     {
-        // Métriques campagnes
+        // MÃ©triques campagnes
         $campagnes = CampagnePelerinage::where('organisation_id', $organisation->id)->get();
         $campagnesTotal = $campagnes->count();
         $campagnesOuvertes = $campagnes->where('statut', CampagnePelerinage::STATUT_OUVERTE)->count();
@@ -118,7 +118,7 @@ class OrganisationDashboardService
             ];
         }
 
-        // Métriques inscriptions
+        // MÃ©triques inscriptions
         $inscriptions = InscriptionPelerinage::whereIn('campagne_pelerinage_id', $campagneIds)->get();
         $totalInscrits = $inscriptions->count();
         $inscritsPayes = $inscriptions->where('statut_inscription', InscriptionPelerinage::STATUT_PAYEE)->count();
@@ -190,7 +190,7 @@ class OrganisationDashboardService
         if (!$anneeCourante) {
             return [
                 'catheo_connecte' => false,
-                'message'         => 'Aucune année catéchétique active sur la paroisse.',
+                'message'         => 'Aucune annÃ©e catÃ©chÃ©tique active sur la paroisse.',
             ];
         }
 
@@ -202,19 +202,36 @@ class OrganisationDashboardService
             ];
         }
 
-        // Requête de base sur les inscriptions annuelles de la paroisse sur l'année active
+        $typeOrg = strtoupper($organisation->type_organisation);
+
+        // RequÃªte de base sur les inscriptions annuelles de la paroisse sur l'annÃ©e active
         $baseQuery = InscriptionAnnuelle::where('paroisse_configuration_id', $paroisseId)
             ->where('annee_catechese_id', $anneeCourante->id)
-            ->whereHas('section', function ($q) use ($targetCodes) {
-                $q->whereIn('code', $targetCodes);
+            ->whereHas('section', function ($q) use ($targetCodes, $typeOrg) {
+                $q->where(function ($sub) use ($targetCodes, $typeOrg) {
+                    $sub->whereIn('code', $targetCodes);
+                    if ($typeOrg === Organisation::TYPE_OPPE) {
+                        $sub->orWhere('code', 'like', 'SEC-ENF%')
+                            ->orWhere('nom', 'like', '%enfant%')
+                            ->orWhere('nom', 'like', '%primaire%')
+                            ->orWhere('nom', 'like', '%college%')
+                            ->orWhere('nom', 'like', '%collÃ¨ge%');
+                    } elseif ($typeOrg === Organisation::TYPE_OPPJ) {
+                        $sub->orWhere('code', 'like', 'SEC-JEUN%')
+                            ->orWhere('nom', 'like', '%jeune%');
+                    } elseif ($typeOrg === Organisation::TYPE_OPPA) {
+                        $sub->orWhere('code', 'like', 'SEC-ADULT%')
+                            ->orWhere('nom', 'like', '%adulte%');
+                    }
+                });
             });
 
         $total = (clone $baseQuery)->count();
 
-        // Répartition par niveau
+        // RÃ©partition par niveau
         $parNiveau = (clone $baseQuery)
             ->with('niveau')
-            ->select('niveau_id', DB::raw('count(*) as total'))
+            ->select('niveau_id', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
             ->groupBy('niveau_id')
             ->get()
             ->map(function ($item) {
@@ -225,16 +242,16 @@ class OrganisationDashboardService
                 ];
             });
 
-        // Répartition par classe
+        // RÃ©partition par classe
         $parClasse = (clone $baseQuery)
             ->with('classe')
-            ->select('classe_id', DB::raw('count(*) as total'))
+            ->select('classe_id', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
             ->groupBy('classe_id')
             ->get()
             ->map(function ($item) {
                 return [
                     'classe_id' => $item->classe_id,
-                    'classe'    => $item->classe?->nom ?? 'Non assigné',
+                    'classe'    => $item->classe?->nom ?? 'Non assignÃ©',
                     'total'     => $item->total,
                 ];
             });
@@ -247,28 +264,34 @@ class OrganisationDashboardService
             'repartition_classes'  => $parClasse,
         ];
 
-        // Ventilation spécifique selon le produit
-        if (strtoupper($organisation->type_organisation) === Organisation::TYPE_OPPE) {
+        // Ventilation spÃ©cifique selon le produit
+        if ($typeOrg === Organisation::TYPE_OPPE) {
             $totalPrimaire = InscriptionAnnuelle::where('paroisse_configuration_id', $paroisseId)
                 ->where('annee_catechese_id', $anneeCourante->id)
                 ->whereHas('section', function ($q) {
-                    $q->where('code', CatheoPopulationService::CODE_ENFANTS_PRIMAIRE);
+                    $q->whereIn('code', CatheoPopulationService::CODES_ENFANTS_PRIMAIRE)
+                      ->orWhere('code', 'like', 'SEC-ENF%PRI%')
+                      ->orWhere('nom', 'like', '%primaire%');
                 })->count();
 
             $totalCollege = InscriptionAnnuelle::where('paroisse_configuration_id', $paroisseId)
                 ->where('annee_catechese_id', $anneeCourante->id)
                 ->whereHas('section', function ($q) {
-                    $q->where('code', CatheoPopulationService::CODE_ENFANTS_COLLEGE);
+                    $q->whereIn('code', CatheoPopulationService::CODES_ENFANTS_COLLEGE)
+                      ->orWhere('code', 'like', 'SEC-ENF%COL%')
+                      ->orWhere('nom', 'like', '%collÃ¨ge%')
+                      ->orWhere('nom', 'like', '%college%');
                 })->count();
 
             $result['total_primaire'] = $totalPrimaire;
             $result['total_college']  = $totalCollege;
-        } elseif (strtoupper($organisation->type_organisation) === Organisation::TYPE_OPPJ) {
+        } elseif ($typeOrg === Organisation::TYPE_OPPJ) {
             $result['total_jeunes'] = $total;
-        } elseif (strtoupper($organisation->type_organisation) === Organisation::TYPE_OPPA) {
+        } elseif ($typeOrg === Organisation::TYPE_OPPA) {
             $result['total_adultes'] = $total;
         }
 
         return $result;
     }
+
 }

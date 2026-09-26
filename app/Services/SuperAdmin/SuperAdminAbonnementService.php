@@ -5,6 +5,8 @@ namespace App\Services\SuperAdmin;
 use App\Models\Abonnement;
 use App\Models\CatecheseConfiguration;
 use App\Models\Formule;
+use App\Models\Organisation;
+use App\Models\Produit;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -21,8 +23,24 @@ class SuperAdminAbonnementService
      */
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = Abonnement::with(['paroisse', 'formule.produit', 'echeances.paiements'])
+        $query = Abonnement::with(['paroisse', 'organisation.produit', 'organisation.paroisse', 'formule.produit', 'echeances.paiements'])
             ->latest('date_debut');
+
+        if (!empty($filters['context'])) {
+            if ($filters['context'] === 'paroisse') {
+                $query->whereNull('organisation_id');
+            } elseif ($filters['context'] === 'organisation') {
+                $query->whereNotNull('organisation_id');
+            }
+        }
+
+        if (!empty($filters['organisation_id'])) {
+            $orgVal = $filters['organisation_id'];
+            $orgId = is_numeric($orgVal) ? (int) $orgVal : Organisation::where('uuid', $orgVal)->value('id');
+            if ($orgId) {
+                $query->where('organisation_id', $orgId);
+            }
+        }
 
         if (!empty($filters['paroisse_id'])) {
             $pVal = $filters['paroisse_id'];
@@ -33,10 +51,15 @@ class SuperAdminAbonnementService
         }
 
         if (!empty($filters['produit_id'])) {
-            $prodId = $filters['produit_id'];
-            $query->whereHas('formule', function ($q) use ($prodId) {
-                $q->where('produit_id', $prodId);
-            });
+            $prodVal = $filters['produit_id'];
+            $prodId = is_numeric($prodVal)
+                ? (int) $prodVal
+                : Produit::where('uuid', $prodVal)->orWhere('code', strtoupper(trim($prodVal)))->value('id');
+            if ($prodId) {
+                $query->whereHas('formule', function ($q) use ($prodId) {
+                    $q->where('produit_id', $prodId);
+                });
+            }
         }
 
         if (!empty($filters['statut']) && $filters['statut'] !== 'tous') {
@@ -75,6 +98,7 @@ class SuperAdminAbonnementService
 
             $abonnement = Abonnement::create([
                 'paroisse_configuration_id' => $paroisse->id,
+                'organisation_id'           => null,
                 'formule_id'                => $formule->id,
                 'reference'                 => $this->billingService->generateAbonnementReference(),
                 'date_debut'                => $dateDebut->toDateString(),
@@ -93,6 +117,79 @@ class SuperAdminAbonnementService
             }
 
             return $abonnement->load(['paroisse', 'formule.produit', 'echeances.facture']);
+        });
+    }
+
+    /**
+     * Souscription d'une organisation à une formule de son produit SaaS.
+     */
+    public function souscrireOrganisation(array $data): Abonnement
+    {
+        $orgVal = $data['organisation_id'] ?? null;
+        $formuleVal = $data['formule_id'] ?? null;
+
+        $orgId = is_numeric($orgVal)
+            ? (int) $orgVal
+            : Organisation::where('uuid', $orgVal)->value('id');
+
+        $formuleId = is_numeric($formuleVal)
+            ? (int) $formuleVal
+            : Formule::where('uuid', $formuleVal)->value('id');
+
+        if (!$orgId) {
+            throw new InvalidArgumentException("Organisation introuvable.");
+        }
+
+        if (!$formuleId) {
+            throw new InvalidArgumentException("Formule introuvable.");
+        }
+
+        $organisation = Organisation::with('produit')->findOrFail($orgId);
+        $formule      = Formule::with('produit')->findOrFail($formuleId);
+
+        // Validation stricte du produit de la formule :
+        // Une organisation OPPE ne peut souscrire qu'à une formule OPPE, etc.
+        if ((int) $formule->produit_id !== (int) $organisation->produit_id) {
+            $nomProdFormule = $formule->produit?->code ?? 'Inconnu';
+            $nomProdOrg     = $organisation->produit?->code ?? 'Inconnu';
+            throw new InvalidArgumentException(
+                "Incompatibilité de formule : La formule choisie concerne le produit [{$nomProdFormule}] alors que cette organisation est de type [{$nomProdOrg}]."
+            );
+        }
+
+        return DB::transaction(function () use ($organisation, $formule, $data) {
+            $montantSnapshot = (float) $formule->montant;
+            $deviseSnapshot  = $formule->devise;
+
+            $dateDebut = !empty($data['date_debut']) ? Carbon::parse($data['date_debut']) : now();
+            $dateFin   = !empty($data['date_fin']) ? Carbon::parse($data['date_fin']) : (
+                ($formule->periodicite === Formule::PERIODICITE_MENSUELLE)
+                    ? $dateDebut->copy()->addMonth()->subDay()
+                    : $dateDebut->copy()->addYear()->subDay()
+            );
+
+            $statutInitial = $formule->est_gratuite ? Abonnement::STATUT_ACTIF : Abonnement::STATUT_EN_ATTENTE;
+
+            $abonnement = Abonnement::create([
+                'paroisse_configuration_id' => $organisation->paroisse_configuration_id,
+                'organisation_id'           => $organisation->id,
+                'formule_id'                => $formule->id,
+                'reference'                 => $this->billingService->generateAbonnementReference(),
+                'date_debut'                => $dateDebut->toDateString(),
+                'date_fin'                  => $dateFin ? $dateFin->toDateString() : null,
+                'statut'                    => $statutInitial,
+                'montant'                   => $montantSnapshot,
+                'devise'                    => $deviseSnapshot,
+                'renouvellement_automatique'=> $data['renouvellement_automatique'] ?? true,
+                'observation'               => $data['observation'] ?? null,
+            ]);
+
+            if (!$formule->est_gratuite) {
+                $echeance = $this->billingService->createInitialEcheance($abonnement);
+                $this->billingService->createFactureForEcheance($echeance);
+            }
+
+            return $abonnement->load(['paroisse', 'organisation.produit', 'formule.produit', 'echeances.facture']);
         });
     }
 

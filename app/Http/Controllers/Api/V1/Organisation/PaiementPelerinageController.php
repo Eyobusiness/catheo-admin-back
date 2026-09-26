@@ -119,7 +119,7 @@ class PaiementPelerinageController extends Controller
             $result = $this->paiementService->create(
                 $inscriptionModel,
                 $request->validated(),
-                $request->user()?->uuid ?? (string) $request->user()?->id
+                $request->user()?->id
             );
 
             return response()->json([
@@ -158,7 +158,7 @@ class PaiementPelerinageController extends Controller
             $result = $this->paiementService->annuler(
                 $paiementModel,
                 $request->input('motif'),
-                $request->user()?->uuid ?? (string) $request->user()?->id
+                $request->user()?->id
             );
 
             return response()->json([

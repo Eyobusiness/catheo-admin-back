@@ -17,11 +17,11 @@ class SuperAdminAbonnementController extends Controller
     ) {}
 
     /**
-     * Liste des abonnements avec filtres.
+     * Liste de tous les abonnements avec filtres.
      */
     public function index(Request $request): JsonResponse
     {
-        $filters = $request->only(['paroisse_id', 'produit_id', 'statut']);
+        $filters = $request->only(['paroisse_id', 'organisation_id', 'produit_id', 'statut', 'context']);
         $perPage = (int) $request->input('per_page', 15);
 
         $result = $this->abonnementService->list($filters, $perPage);
@@ -37,6 +37,86 @@ class SuperAdminAbonnementController extends Controller
                 'total'        => $result->total(),
             ],
         ]);
+    }
+
+    /**
+     * Liste des abonnements Paroisses uniquement (CATHEO).
+     */
+    public function paroisses(Request $request): JsonResponse
+    {
+        $filters = $request->only(['paroisse_id', 'produit_id', 'statut']);
+        $filters['context'] = 'paroisse';
+        $perPage = (int) $request->input('per_page', 15);
+
+        $result = $this->abonnementService->list($filters, $perPage);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Liste des abonnements paroisses récupérée avec succès.',
+            'data'    => AbonnementResource::collection($result),
+            'meta'    => [
+                'context'      => 'paroisses',
+                'current_page' => $result->currentPage(),
+                'last_page'    => $result->lastPage(),
+                'per_page'     => $result->perPage(),
+                'total'        => $result->total(),
+            ],
+        ]);
+    }
+
+    /**
+     * Liste des abonnements Organisations uniquement (OPPE, OPPJ, OPPA).
+     */
+    public function organisations(Request $request): JsonResponse
+    {
+        $filters = $request->only(['organisation_id', 'produit_id', 'statut']);
+        $filters['context'] = 'organisation';
+        $perPage = (int) $request->input('per_page', 15);
+
+        $result = $this->abonnementService->list($filters, $perPage);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Liste des abonnements organisations récupérée avec succès.',
+            'data'    => AbonnementResource::collection($result),
+            'meta'    => [
+                'context'      => 'organisations',
+                'current_page' => $result->currentPage(),
+                'last_page'    => $result->lastPage(),
+                'per_page'     => $result->perPage(),
+                'total'        => $result->total(),
+            ],
+        ]);
+    }
+
+    /**
+     * Souscrire une organisation à une formule spécifique à son produit.
+     */
+    public function storeOrganisation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'organisation_id'            => 'required',
+            'formule_id'                 => 'required',
+            'date_debut'                 => 'nullable|date',
+            'date_fin'                   => 'nullable|date|after_or_equal:date_debut',
+            'renouvellement_automatique' => 'nullable|boolean',
+            'observation'                => 'nullable|string',
+        ]);
+
+        try {
+            $abonnement = $this->abonnementService->souscrireOrganisation($validated);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Abonnement d\'organisation souscrit avec succès.',
+            'data'    => new AbonnementResource($abonnement),
+        ], 201);
     }
 
     /**

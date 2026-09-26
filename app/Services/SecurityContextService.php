@@ -88,6 +88,11 @@ class SecurityContextService
             throw new AccessDeniedHttpException("L'organisation rattachée à cet utilisateur est introuvable ou inactive.");
         }
 
+        // Si l'organisation est indépendante (sans paroisse)
+        if ($organisation->isIndependant() || empty($organisation->paroisse_configuration_id)) {
+            return true;
+        }
+
         if ((int) $organisation->paroisse_configuration_id !== (int) $user->paroisse_configuration_id) {
             throw new AccessDeniedHttpException(
                 "Violation de sécurité multi-tenant : L'organisation [{$organisation->id}] appartient à la paroisse [{$organisation->paroisse_configuration_id}] " .
@@ -222,6 +227,14 @@ class SecurityContextService
         // Un utilisateur d'une organisation ne peut accéder qu'à son organisation
         if (!empty($user->organisation_id) && (int) $user->organisation_id !== (int) $organisation->id) {
             throw new AccessDeniedHttpException("Accès refusé à cette organisation.");
+        }
+
+        // Organisation indépendante (sans paroisse parente)
+        if ($organisation->isIndependant() || empty($organisation->paroisse_configuration_id)) {
+            if ((int) $user->organisation_id !== (int) $organisation->id) {
+                throw new AccessDeniedHttpException("Accès refusé à cette organisation indépendante.");
+            }
+            return;
         }
 
         // Un administrateur de paroisse ne peut accéder qu'aux organisations de sa paroisse

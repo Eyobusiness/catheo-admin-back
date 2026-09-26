@@ -10,26 +10,37 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 class CatheoPopulationService
 {
     /**
-     * Codes officiels de section dans CATHEO
+     * Codes officiels et variantes des sections dans CATHEO
      */
-    public const CODE_ENFANTS_PRIMAIRE = 'SEC-ENFANTS-PRI';
-    public const CODE_ENFANTS_COLLEGE  = 'SEC-ENFANTS-COL';
-    public const CODE_JEUNES           = 'SEC-JEUNES';
-    public const CODE_ADULTES          = 'SEC-ADULTES';
+    public const CODE_ENFANTS_PRIMAIRE     = 'SEC-ENFANTS-PRI';
+    public const CODE_ENFANTS_PRIMAIRE_ALT = 'SEC-ENF-PRI';
+    public const CODES_ENFANTS_PRIMAIRE    = ['SEC-ENFANTS-PRI', 'SEC-ENF-PRI'];
+
+    public const CODE_ENFANTS_COLLEGE      = 'SEC-ENFANTS-COL';
+    public const CODE_ENFANTS_COLLEGE_ALT  = 'SEC-ENF-COL';
+    public const CODES_ENFANTS_COLLEGE     = ['SEC-ENFANTS-COL', 'SEC-ENF-COL'];
+
+    public const CODE_JEUNES               = 'SEC-JEUNES';
+    public const CODE_JEUNES_ALT           = 'SEC-JEUNE';
+    public const CODES_JEUNES              = ['SEC-JEUNES', 'SEC-JEUNE'];
+
+    public const CODE_ADULTES              = 'SEC-ADULTES';
+    public const CODE_ADULTES_ALT          = 'SEC-ADULTE';
+    public const CODES_ADULTES             = ['SEC-ADULTES', 'SEC-ADULTE'];
 
     /**
-     * Retourne les codes de section CATHEO autorisés pour une organisation donnée.
+     * Retourne tous les codes de section CATHEO autorisés pour une organisation donnée.
      * RÈGLE MÉTIER STRICTE :
-     * OPPE -> SEC-ENFANTS-PRI et SEC-ENFANTS-COL
-     * OPPJ -> SEC-JEUNES
-     * OPPA -> SEC-ADULTES
+     * OPPE -> Enfants Primaire + Enfants Collège (SEC-ENFANTS-PRI, SEC-ENF-PRI, SEC-ENFANTS-COL, SEC-ENF-COL)
+     * OPPJ -> Jeunes (SEC-JEUNES, SEC-JEUNE)
+     * OPPA -> Adultes (SEC-ADULTES, SEC-ADULTE)
      */
     public function getTargetSectionCodes(string $typeOrganisation): array
     {
         return match (strtoupper(trim($typeOrganisation))) {
-            Organisation::TYPE_OPPE => [self::CODE_ENFANTS_PRIMAIRE, self::CODE_ENFANTS_COLLEGE],
-            Organisation::TYPE_OPPJ => [self::CODE_JEUNES],
-            Organisation::TYPE_OPPA => [self::CODE_ADULTES],
+            Organisation::TYPE_OPPE => array_merge(self::CODES_ENFANTS_PRIMAIRE, self::CODES_ENFANTS_COLLEGE),
+            Organisation::TYPE_OPPJ => self::CODES_JEUNES,
+            Organisation::TYPE_OPPA => self::CODES_ADULTES,
             default                 => [],
         };
     }
@@ -46,10 +57,12 @@ class CatheoPopulationService
         // Récupérer l'année pastorale en cours/active de la paroisse
         $anneeCourante = AnneeCatechese::getAnneeCourante($paroisseId);
 
-        // Si aucune année active trouvée, renvoyer une pagination vide
-        if (!$anneeCourante || empty($targetCodes)) {
+        // Si aucune année active trouvée ou pas de paroisse liée, renvoyer une pagination vide
+        if (!$anneeCourante || empty($targetCodes) || !$paroisseId) {
             return InscriptionAnnuelle::whereRaw('1 = 0')->paginate($perPage);
         }
+
+        $typeOrg = strtoupper($organisation->type_organisation);
 
         $query = InscriptionAnnuelle::with([
             'catechumene',
@@ -60,8 +73,23 @@ class CatheoPopulationService
         ])
         ->where('paroisse_configuration_id', $paroisseId)
         ->where('annee_catechese_id', $anneeCourante->id)
-        ->whereHas('section', function ($q) use ($targetCodes) {
-            $q->whereIn('code', $targetCodes);
+        ->whereHas('section', function ($q) use ($targetCodes, $typeOrg) {
+            $q->where(function ($sub) use ($targetCodes, $typeOrg) {
+                $sub->whereIn('code', $targetCodes);
+                if ($typeOrg === Organisation::TYPE_OPPE) {
+                    $sub->orWhere('code', 'like', 'SEC-ENF%')
+                        ->orWhere('nom', 'like', '%enfant%')
+                        ->orWhere('nom', 'like', '%primaire%')
+                        ->orWhere('nom', 'like', '%college%')
+                        ->orWhere('nom', 'like', '%collège%');
+                } elseif ($typeOrg === Organisation::TYPE_OPPJ) {
+                    $sub->orWhere('code', 'like', 'SEC-JEUN%')
+                        ->orWhere('nom', 'like', '%jeune%');
+                } elseif ($typeOrg === Organisation::TYPE_OPPA) {
+                    $sub->orWhere('code', 'like', 'SEC-ADULT%')
+                        ->orWhere('nom', 'like', '%adulte%');
+                }
+            });
         })
         ->latest('id');
 

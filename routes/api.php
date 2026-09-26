@@ -55,6 +55,9 @@ use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminFactureController;
 use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminParoisseController;
 use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminDashboardController;
 use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminOrganisationController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminUserController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminAuditController;
+use App\Http\Controllers\Api\V1\SuperAdmin\SuperAdminTrashController;
 use App\Http\Controllers\Api\V1\Organisation\OrganisationProfileController;
 use App\Http\Controllers\Api\V1\Organisation\MembreController;
 use App\Http\Controllers\Api\V1\Organisation\ActiviteController;
@@ -614,8 +617,11 @@ Route::middleware(['auth:sanctum', 'super_admin'])->prefix('super-admin')->group
     Route::patch('/formules/{formule}/toggle-status', [SuperAdminFormuleController::class, 'toggleStatus']);
     Route::delete('/formules/{formule}', [SuperAdminFormuleController::class, 'destroy']);
 
-    // Gestion des Abonnements par Paroisse
+    // Gestion des Abonnements (Général, Paroisses, Organisations)
     Route::get('/abonnements', [SuperAdminAbonnementController::class, 'index']);
+    Route::get('/abonnements/paroisses', [SuperAdminAbonnementController::class, 'paroisses']);
+    Route::get('/abonnements/organisations', [SuperAdminAbonnementController::class, 'organisations']);
+    Route::post('/abonnements/organisations', [SuperAdminAbonnementController::class, 'storeOrganisation']);
     Route::post('/abonnements', [SuperAdminAbonnementController::class, 'store']);
     Route::get('/abonnements/{abonnement}', [SuperAdminAbonnementController::class, 'show']);
     Route::patch('/abonnements/{abonnement}/statut', [SuperAdminAbonnementController::class, 'changerStatut']);
@@ -637,14 +643,46 @@ Route::middleware(['auth:sanctum', 'super_admin'])->prefix('super-admin')->group
     Route::get('/factures', [SuperAdminFactureController::class, 'index']);
     Route::get('/factures/{facture}', [SuperAdminFactureController::class, 'show']);
 
-    // Supervision des Paroisses
+    // Gestion complète des Paroisses (F25.8)
     Route::get('/paroisses', [SuperAdminParoisseController::class, 'index']);
+    Route::post('/paroisses', [SuperAdminParoisseController::class, 'store']);
     Route::get('/paroisses/{id}', [SuperAdminParoisseController::class, 'show']);
+    Route::put('/paroisses/{id}', [SuperAdminParoisseController::class, 'update']);
+    Route::delete('/paroisses/{id}', [SuperAdminParoisseController::class, 'destroy']);
+        Route::get('/paroisses/system-profils', [SuperAdminParoisseController::class, 'systemProfils']);
+        Route::get('/paroisses/{id}/users', [SuperAdminParoisseController::class, 'users']);
+        Route::post('/paroisses/{id}/users', [SuperAdminParoisseController::class, 'storeUser']);
+        Route::put('/paroisses/{paroisseId}/users/{userId}', [SuperAdminParoisseController::class, 'updateUser']);
+        Route::delete('/paroisses/{paroisseId}/users/{userId}', [SuperAdminParoisseController::class, 'destroyUser']);
 
-    // Supervision des Organisations & Provisionnement du premier responsable
+    // Gestion complète des Organisations
     Route::get('/organisations', [SuperAdminOrganisationController::class, 'index']);
+    Route::post('/organisations', [SuperAdminOrganisationController::class, 'store']);
+    Route::get('/organisations/{organisation}/formules', [SuperAdminOrganisationController::class, 'formules']);
     Route::get('/organisations/{organisation}', [SuperAdminOrganisationController::class, 'show']);
+    Route::put('/organisations/{organisation}', [SuperAdminOrganisationController::class, 'update']);
+    Route::patch('/organisations/{organisation}/statut', [SuperAdminOrganisationController::class, 'changerStatut']);
+    Route::delete('/organisations/{organisation}', [SuperAdminOrganisationController::class, 'destroy']);
     Route::post('/organisations/{organisation}/responsable', [SuperAdminOrganisationController::class, 'createResponsable']);
+
+    // Gestion des Utilisateurs Super Admin
+    Route::get('/users', [SuperAdminUserController::class, 'index']);
+    Route::post('/users', [SuperAdminUserController::class, 'store']);
+    Route::get('/users/{user}', [SuperAdminUserController::class, 'show']);
+    Route::put('/users/{user}', [SuperAdminUserController::class, 'update']);
+    Route::patch('/users/{user}/statut', [SuperAdminUserController::class, 'changerStatut']);
+    Route::delete('/users/{user}', [SuperAdminUserController::class, 'destroy']);
+    Route::post('/users/{user}/reset-password', [SuperAdminUserController::class, 'resetPassword']);
+
+    // Journal d'audit centralisé
+    Route::get('/audit-logs', [SuperAdminAuditController::class, 'index']);
+    Route::get('/audit-logs/{id}', [SuperAdminAuditController::class, 'show']);
+
+    // Corbeille centrale (Trash / Soft Deletes)
+    Route::get('/trash', [SuperAdminTrashController::class, 'index']);
+    Route::get('/trash/{uuid}', [SuperAdminTrashController::class, 'show']);
+    Route::post('/trash/{uuid}/restore', [SuperAdminTrashController::class, 'restore']);
+    Route::delete('/trash/{uuid}/force', [SuperAdminTrashController::class, 'force']);
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -655,6 +693,7 @@ Route::middleware(['auth:sanctum', 'organisation'])->prefix('organisation')->gro
     Route::get('/context', [OrganisationProfileController::class, 'context']);
     Route::get('/info', [OrganisationProfileController::class, 'context']);
     Route::put('/info', [OrganisationProfileController::class, 'update']);
+    Route::post('/info', [OrganisationProfileController::class, 'update']);
 
     // Membres de l'organisation
     Route::get('/membres', [MembreController::class, 'index']);
@@ -671,11 +710,17 @@ Route::middleware(['auth:sanctum', 'organisation'])->prefix('organisation')->gro
     Route::delete('/activites/{activite}', [ActiviteController::class, 'destroy']);
 
     // Utilisateurs de l'organisation
+    Route::get('/paroisses', [OrganisationProfileController::class, 'paroissesList']);
+    Route::get('/audit-logs', [OrganisationProfileController::class, 'auditLogs']);
+
+    // Utilisateurs de l'organisation
+    Route::get('/users/profils', [OrganisationUserController::class, 'profils']);
     Route::get('/users', [OrganisationUserController::class, 'index']);
     Route::post('/users', [OrganisationUserController::class, 'store']);
     Route::get('/users/{user}', [OrganisationUserController::class, 'show']);
     Route::put('/users/{user}', [OrganisationUserController::class, 'update']);
     Route::patch('/users/{user}/toggle-status', [OrganisationUserController::class, 'toggleStatus']);
+    Route::delete('/users/{user}', [OrganisationUserController::class, 'destroy']);
 
     // Passerelle Population CATHEO (filtrée par codes de section stricts et année courante)
     Route::get('/catheo/population', [CatheoPopulationController::class, 'index']);
@@ -740,6 +785,8 @@ Route::middleware(['auth:sanctum', 'organisation'])->prefix('organisation')->gro
 
     // État de caisse
     Route::get('/caisse', [OrganisationCaisseController::class, 'index']);
+    Route::post('/caisse/depenses', [OrganisationCaisseController::class, 'storeDepense']);
+    Route::post('/caisse/depenses/{operation}/annuler', [OrganisationCaisseController::class, 'annulerDepense']);
 
     // Rapport annuel
     Route::get('/rapports/annuel', [OrganisationRapportController::class, 'annuel']);

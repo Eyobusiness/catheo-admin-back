@@ -17,6 +17,8 @@ class OrganisationContextResource extends JsonResource
             'nom'                   => $this->nom,
             'description'           => $this->description,
             'statut'                => $this->statut,
+            'mode'                  => $this->mode,
+            'paroisse_id'           => $this->paroisse_configuration_id,
             'produit_code'          => $this->produit?->code,
             'produit_nom'           => $this->produit?->nom,
             'paroisse'              => $this->paroisse ? [
@@ -26,16 +28,22 @@ class OrganisationContextResource extends JsonResource
                 'diocese'       => $this->paroisse->diocese,
                 'ville'         => $this->paroisse->ville,
             ] : null,
-            'responsable'           => [
+            'responsable'           => $this->responsable_nom,
+            'responsable_nom'       => $this->responsable_nom,
+            'responsable_details'   => [
                 'nom'       => $this->responsable_nom,
                 'telephone' => $this->responsable_telephone,
                 'email'     => $this->responsable_email,
             ],
+            'telephone'             => $this->telephone,
+            'email'                 => $this->email,
+            'adresse'               => $this->adresse,
             'contact'               => [
                 'telephone' => $this->telephone,
                 'email'     => $this->email,
                 'adresse'   => $this->adresse,
             ],
+            'logo_url'              => $this->logo_url,
             'stats'                 => [
                 'total_membres'   => $this->membres()->count(),
                 'membres_actifs'  => $this->membres()->where('statut', 'actif')->count(),

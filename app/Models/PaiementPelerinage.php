@@ -53,7 +53,7 @@ class PaiementPelerinage extends Model
 
     public function caissier(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by', 'uuid');
+        return $this->belongsTo(User::class, 'created_by', 'id');
     }
 
     public function operations(): HasMany

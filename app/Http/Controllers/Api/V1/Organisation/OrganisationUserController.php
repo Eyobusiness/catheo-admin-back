@@ -130,4 +130,46 @@ class OrganisationUserController extends Controller
             'data'    => new OrganisationUserResource($updated),
         ]);
     }
+    /**
+     * Supprimer un compte utilisateur (Soft Delete).
+     */
+    public function destroy(Request $request, User $user): JsonResponse
+    {
+        /** @var Organisation $organisation */
+        $organisation = $request->attributes->get('organisation');
+
+        if ((int) $user->organisation_id !== (int) $organisation->id) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Utilisateur introuvable dans cette organisation.',
+            ], 404);
+        }
+
+        $user->delete();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Compte utilisateur supprimé avec succès.',
+        ]);
+    }
+
+    /**
+     * Liste des profils / rôles assignables aux utilisateurs de cette organisation.
+     */
+    public function profils(Request $request): JsonResponse
+    {
+        /** @var Organisation $organisation */
+        $organisation = $request->attributes->get('organisation');
+        $type = $organisation->type_organisation; // OPPE, OPPJ, OPPA
+
+        $profils = \App\Models\Profil::where('code', 'like', "%{$type}%")
+            ->orWhere('code', 'ADMIN')
+            ->get(['id', 'code', 'nom', 'description']);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Profils disponibles récupérés avec succès.',
+            'data'    => $profils,
+        ]);
+    }
 }

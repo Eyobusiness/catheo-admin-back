@@ -9,27 +9,55 @@ use Illuminate\Support\Facades\Auth;
 trait Auditable
 {
     /**
+     * Determines whether the model's audit columns use integer ID or UUID string.
+     */
+    protected static function getAuditKeyForModel($model, $user): mixed
+    {
+        if (!$user) {
+            return null;
+        }
+
+        return static::getAuditKeyType($model) === 'id' ? $user->id : ($user->uuid ?? $user->id);
+    }
+
+    protected static function getAuditKeyType($model): string
+    {
+        // Tables using integer user ID for audit columns
+        static $intTables = [
+            'campagne_pelerinages',
+            'inscription_pelerinages',
+            'tarif_pelerinages',
+            'paiement_pelerinages',
+            'operation_organisations',
+            'sacrements',
+            'catechumen_sacrements',
+            'system_notifications',
+        ];
+
+        return in_array($model->getTable(), $intTables, true) ? 'id' : 'uuid';
+    }
+
+    /**
      * Boot the trait to automatically handle created_by, updated_by, deleted_by.
      */
     public static function bootAuditable(): void
     {
-        // 1. Création : assigne created_by à l'UUID de l'utilisateur authentifié
+        // 1. Création : assigne created_by (ID ou UUID selon la table)
         static::creating(function ($model) {
             if (Auth::check()) {
                 $user = Auth::user();
-                $userId = $user->uuid ?? $user->id;
+                $auditKey = static::getAuditKeyForModel($model, $user);
                 if (empty($model->created_by)) {
-                    $model->created_by = $userId;
+                    $model->created_by = $auditKey;
                 }
             }
         });
 
-        // 2. Modification : assigne updated_by à l'UUID de l'utilisateur authentifié
+        // 2. Modification : assigne updated_by
         static::updating(function ($model) {
             if (Auth::check()) {
                 $user = Auth::user();
-                $userId = $user->uuid ?? $user->id;
-                $model->updated_by = $userId;
+                $model->updated_by = static::getAuditKeyForModel($model, $user);
             }
         });
 
@@ -37,8 +65,7 @@ trait Auditable
         static::deleting(function ($model) {
             if (Auth::check() && method_exists($model, 'isForceDeleting') && !$model->isForceDeleting()) {
                 $user = Auth::user();
-                $userId = $user->uuid ?? $user->id;
-                $model->deleted_by = $userId;
+                $model->deleted_by = static::getAuditKeyForModel($model, $user);
                 $model->saveQuietly();
             }
         });
@@ -48,8 +75,7 @@ trait Auditable
             static::restoring(function ($model) {
                 if (Auth::check()) {
                     $user = Auth::user();
-                    $userId = $user->uuid ?? $user->id;
-                    $model->updated_by = $userId;
+                    $model->updated_by = static::getAuditKeyForModel($model, $user);
                 }
                 $model->deleted_by = null;
             });
@@ -61,7 +87,8 @@ trait Auditable
      */
     public function createdBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by', 'uuid');
+        $ownerKey = static::getAuditKeyType($this) === 'id' ? 'id' : 'uuid';
+        return $this->belongsTo(User::class, 'created_by', $ownerKey);
     }
 
     /**
@@ -69,7 +96,8 @@ trait Auditable
      */
     public function updatedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'updated_by', 'uuid');
+        $ownerKey = static::getAuditKeyType($this) === 'id' ? 'id' : 'uuid';
+        return $this->belongsTo(User::class, 'updated_by', $ownerKey);
     }
 
     /**
@@ -77,6 +105,7 @@ trait Auditable
      */
     public function deletedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'deleted_by', 'uuid');
+        $ownerKey = static::getAuditKeyType($this) === 'id' ? 'id' : 'uuid';
+        return $this->belongsTo(User::class, 'deleted_by', $ownerKey);
     }
 }
